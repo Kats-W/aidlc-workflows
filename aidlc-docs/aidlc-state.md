@@ -20,16 +20,16 @@
 ## Extension Configuration
 | Extension | Enabled | Decided At |
 |---|---|---|
-| Security Baseline | Pending | — |
-| Property-Based Testing | Pending | — |
+| Security Baseline | Yes | Requirements Analysis |
+| Property-Based Testing | Yes (Full) | Requirements Analysis |
 
 ## Stage Progress
 
 ### INCEPTION PHASE
 - [x] Workspace Detection
 - [ ] Reverse Engineering (skipped — greenfield)
-- [ ] Requirements Analysis (in progress — awaiting answers to clarifying questions)
-- [ ] User Stories
+- [x] Requirements Analysis
+- [ ] User Stories (in progress)
 - [ ] Workflow Planning
 - [ ] Application Design
 - [ ] Units Generation
