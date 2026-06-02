@@ -52,3 +52,19 @@
 **Context**: INCEPTION — Requirements Analysis complete.
 
 ---
+
+## Requirements Analysis — Corrections Applied
+**Timestamp**: 2026-06-02T00:10:00Z
+**User Input**: "ASRとTTSの要件が逆です。またdeegramがまだネイティブ対応しておらずAPIキーが必要なのだったらネイティブで利用可能な極力自然な発話が可能なモデルを採用する。加えてイニシャル/ランニングコストの見積もりを要件に加える。コストは最小（100件未満の会話セッション利用で5000円/月以内を想定）に抑え、コストのボトルネックがあればあらかじめ実装前に明らかにし、仕様変更の要否を私に問うこと。"
+**AI Response**: (1) ASR/TTS 訂正: ASR=Lex v2 ネイティブ、TTS=Polly Neural Kazuha。(2) コストボトルネック（OpenSearch Serverless ~$700/月）を報告、ベクトルストア代替案 A〜D を提示。
+**Context**: INCEPTION — Requirements Analysis, revision round.
+
+---
+
+## Requirements Analysis — Vector Store Decision
+**Timestamp**: 2026-06-02T00:11:00Z
+**User Input**: "問題ないが外部サービスアカウントが増えることによる管理コストを考えネイティブのみのB-2案でいきます"
+**AI Response**: B-2 案（DynamoDB + Lambda カスタム RAG）確定。requirements.md・technical-environment-document.md を更新。月額見積もり ~3,266 円（目標 5,000 円以内）。
+**Context**: INCEPTION — Requirements Analysis、全変更反映完了。
+
+---
