@@ -61,6 +61,14 @@
 
 ---
 
+## User Stories — Planning Q&A
+**Timestamp**: 2026-06-02T00:15:00Z
+**User Input**: "US-Q1: D / US-Q2: C / US-Q3: C"
+**AI Response**: Story plan confirmed: Epic+sub-story hierarchy, BDD+checklist acceptance criteria, mixed granularity. Generated story-generation-plan.md, personas.md (4 personas), stories.md (7 epics, 21 stories).
+**Context**: INCEPTION — User Stories, Part 2 Generation complete.
+
+---
+
 ## Requirements Analysis — Vector Store Decision
 **Timestamp**: 2026-06-02T00:11:00Z
 **User Input**: "問題ないが外部サービスアカウントが増えることによる管理コストを考えネイティブのみのB-2案でいきます"
