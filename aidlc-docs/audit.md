@@ -84,6 +84,21 @@
 
 ---
 
+## Units Generation — Planning Q&A
+**Timestamp**: 2026-06-02T23:00:00Z
+**User Input**: "全てA案でお願いします"
+**AI Response**: Q1〜Q5 全てA案で確定。unit-of-work-plan.md に回答記録。Opus サブエージェントで3ファイル生成。
+**Context**: INCEPTION — Units Generation Part 1 承認 → Part 2 実行完了。
+
+---
+
+## Units Generation — Complete
+**Timestamp**: 2026-06-02T23:30:00Z
+**AI Response**: unit-of-work.md / unit-of-work-dependency.md / unit-of-work-story-map.md 生成完了。全21ストーリー割り当て確認（未割り当て0件）。DoD に PII マスク・8秒制約・コスト対策・PBT を組み込み。
+**Context**: INCEPTION — Units Generation 完了。CONSTRUCTION PHASE 準備完了。
+
+---
+
 ## Application Design — Approval & Execution
 **Timestamp**: 2026-06-02T22:30:00Z
 **User Input**: "承認します。なお、今後sonnetよりもopusが適した複雑なタスクについては能動的に自身のモデルをopusへ変更、またはopusのサブエージェントを立ち上げ、品質と効率を両立して進めてください"
