@@ -4,7 +4,7 @@
 - **Project Name**: au Jibun Bank AI Agent
 - **Project Type**: Greenfield
 - **Start Date**: 2026-06-01T22:40:00Z
-- **Current Stage**: INCEPTION - Requirements Analysis (Awaiting Answers)
+- **Current Stage**: INCEPTION - Units Generation (next)
 - **Depth Level**: Comprehensive
 
 ## Workspace State
@@ -31,8 +31,8 @@
 - [x] Requirements Analysis
 - [x] User Stories
 - [x] Workflow Planning
-- [ ] Application Design (EXECUTE — next)
-- [ ] Units Generation (EXECUTE)
+- [x] Application Design (COMPLETE)
+- [ ] Units Generation (EXECUTE — next)
 
 ### CONSTRUCTION PHASE
 - [ ] Per-Unit Loop (not started)
