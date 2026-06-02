@@ -30,9 +30,9 @@
 - [ ] Reverse Engineering (skipped — greenfield)
 - [x] Requirements Analysis
 - [x] User Stories
-- [ ] Workflow Planning
-- [ ] Application Design
-- [ ] Units Generation
+- [x] Workflow Planning
+- [ ] Application Design (EXECUTE — next)
+- [ ] Units Generation (EXECUTE)
 
 ### CONSTRUCTION PHASE
 - [ ] Per-Unit Loop (not started)
