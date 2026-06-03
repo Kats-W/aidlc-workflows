@@ -1,0 +1,73 @@
+[project]
+name = "au-jibun-bank-ai-agent"
+version = "0.1.0"
+description = "au Jibun Bank AI Agent — Lambda code (Python 3.12, uv)"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.34",
+    "aioboto3>=12.0",
+    "aws-lambda-powertools>=2.0",
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "numpy>=1.26",
+    "msgpack>=1.0",  # pickle の代替キャッシュ形式（U-02 で使用）
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "moto[dynamodb,s3,secretsmanager,ssm,kms,iam,lambda]>=5.0",
+    "boto3-stubs[dynamodb,s3,secretsmanager,ssm,kms,iam,lambda,bedrock-runtime,comprehend]",
+    "hypothesis>=6.100",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade (enforce modern typing)
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "."
+
+[[tool.mypy.overrides]]
+module = ["bs4.*", "msgpack.*", "aioboto3.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra"
