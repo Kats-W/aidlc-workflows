@@ -2,6 +2,13 @@
 
 ---
 
+## U-05 SDK & Customer Profile — Complete
+**Timestamp**: 2026-06-03T02:00:00Z
+**AI Response**: U-05 を Dynamic Workflow で一括生成。設計 4 フェーズ（functional-design / nfr-requirements / nfr-design / infrastructure-design）+ code-generation-plan を作成。実装: IdentityHasher（SHA-256 au ID→customerId、平文非ログ）、CustomerProfileLambda（Connect 属性→GSI gsi-customer-id でプロファイル/tier 参照、6秒バジェット、anonymous 降格、never-raise）、CrmWriterLambda+CrmClient（SQS トリガー、httpx 非同期 POST、Secrets Manager キーキャッシュ、指数バックオフ 2s→4s→8s 最大3回、4xx 終端、5xx リトライ、DLQ 退避、anonymous スキップ）。ProfileStack（2 Lambda・SQS+DLQ KMS暗号化・CloudWatch アラーム・最小権限 IAM）を app.ts に登録。テスト profile 28 件・全体 246 件パス、profile カバレッジ 89%、ruff/mypy クリーン、tsc クリーン、cdk synth 成功。対象: US-5.1 / US-5.2 / US-6.3。
+**Context**: CONSTRUCTION — U-05 完了。
+
+---
+
 ## Workflow Start — Workspace Detection
 **Timestamp**: 2026-06-01T22:40:00Z
 **User Input**: "AI-DLCの手法を使い、awsアカウントへAmazonコネクトを使った生成AIエージェント（音声/テキスト）を作る。回答の元となるのはauじぶん銀行の公式ウェブサイトと対顧向けFAQをクローリングして情報を集め、過去情報に注意し、エージェントを手動でメンテナンスせずともウェブサイトやFAQの更新と利用者からのフィードバックにより自己改善サイクルを確立する。週に一度、管理画面上で利用データを元にウェブサイトやFAQの改善案を、わかりづらい箇所から優先的に最大10件提案する。エージェントはオムニチャネルでセッション中のチャネル切り替えを可能とし、SDKを活用したネイティブアプリへの組み込みにより一過性でなく顧客ごとに過去の履歴を蓄積し、必要に応じて履歴を参照の上パーソナライズされた対応が可能。始めましょう。"

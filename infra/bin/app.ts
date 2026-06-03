@@ -4,6 +4,7 @@ import { SharedInfraStack } from '../lib/stacks/shared_infra_stack';
 import { KnowledgePipelineStack } from '../lib/stacks/knowledge_pipeline_stack';
 import { ConversationStack } from '../lib/stacks/conversation_stack';
 import { OmnichannelStack } from '../lib/stacks/omnichannel_stack';
+import { ProfileStack } from '../lib/stacks/profile_stack';
 
 const app = new cdk.App();
 
@@ -47,12 +48,20 @@ new OmnichannelStack(app, `AuJibunBank-${env}-Omnichannel`, {
   description: `au Jibun Bank AI Agent — Omnichannel & Escalation (U-04) (${env})`,
 });
 
+// U-05 SDK & Customer Profile: au ID hash -> customerId attribution + async
+// CRM conversation-summary write-back (SQS + DLQ).
+new ProfileStack(app, `AuJibunBank-${env}-Profile`, {
+  env: cdkEnv,
+  envName: env,
+  description: `au Jibun Bank AI Agent — SDK & Customer Profile (U-05) (${env})`,
+  crmEndpoint: app.node.tryGetContext('crmEndpoint') ?? 'https://crm.jibunbank.example/api/v1/summaries',
+});
+
 // ---------------------------------------------------------------------------
 // Placeholders for the remaining follow-on unit stacks. These are intentionally
 // commented out; each unit will instantiate its own stack and consume the
 // SharedInfraStack exports via SSM Parameter Store.
 //
-//   new CrmIntegrationStack(app, `AuJibunBank-${env}-CrmIntegration`, { ... });                // U-05
 //   new ImprovementStack(app, `AuJibunBank-${env}-Improvement`, { ... });                      // U-06
 //   new OpsStack(app, `AuJibunBank-${env}-Ops`, { ... });                                      // U-07 (ops/dashboards)
 // ---------------------------------------------------------------------------
