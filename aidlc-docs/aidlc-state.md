@@ -4,7 +4,7 @@
 - **Project Name**: au Jibun Bank AI Agent
 - **Project Type**: Greenfield
 - **Start Date**: 2026-06-01T22:40:00Z
-- **Current Stage**: CONSTRUCTION PHASE — U-01 Core Infrastructure (設計完了・承認待ち)
+- **Current Stage**: CONSTRUCTION PHASE — U-01 Core Infrastructure (Code Generation)
 - **Depth Level**: Comprehensive
 
 ## Workspace State
