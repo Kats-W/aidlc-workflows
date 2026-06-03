@@ -3,6 +3,7 @@ import * as cdk from 'aws-cdk-lib';
 import { SharedInfraStack } from '../lib/stacks/shared_infra_stack';
 import { KnowledgePipelineStack } from '../lib/stacks/knowledge_pipeline_stack';
 import { ConversationStack } from '../lib/stacks/conversation_stack';
+import { OmnichannelStack } from '../lib/stacks/omnichannel_stack';
 
 const app = new cdk.App();
 
@@ -39,12 +40,18 @@ new ConversationStack(app, `AuJibunBank-${env}-Conversation`, {
   description: `au Jibun Bank AI Agent — Conversation Engine (U-03) (${env})`,
 });
 
+// U-04 Omnichannel & Escalation: voice<->chat handover + escalation queue wiring.
+new OmnichannelStack(app, `AuJibunBank-${env}-Omnichannel`, {
+  env: cdkEnv,
+  envName: env,
+  description: `au Jibun Bank AI Agent — Omnichannel & Escalation (U-04) (${env})`,
+});
+
 // ---------------------------------------------------------------------------
 // Placeholders for the remaining follow-on unit stacks. These are intentionally
 // commented out; each unit will instantiate its own stack and consume the
 // SharedInfraStack exports via SSM Parameter Store.
 //
-//   new ContactAnalysisStack(app, `AuJibunBank-${env}-ContactAnalysis`, { ... });              // U-04
 //   new CrmIntegrationStack(app, `AuJibunBank-${env}-CrmIntegration`, { ... });                // U-05
 //   new ImprovementStack(app, `AuJibunBank-${env}-Improvement`, { ... });                      // U-06
 //   new OpsStack(app, `AuJibunBank-${env}-Ops`, { ... });                                      // U-07 (ops/dashboards)
