@@ -5,6 +5,7 @@ import { KnowledgePipelineStack } from '../lib/stacks/knowledge_pipeline_stack';
 import { ConversationStack } from '../lib/stacks/conversation_stack';
 import { OmnichannelStack } from '../lib/stacks/omnichannel_stack';
 import { ProfileStack } from '../lib/stacks/profile_stack';
+import { ImprovementStack } from '../lib/stacks/improvement_stack';
 
 const app = new cdk.App();
 
@@ -57,12 +58,19 @@ new ProfileStack(app, `AuJibunBank-${env}-Profile`, {
   crmEndpoint: app.node.tryGetContext('crmEndpoint') ?? 'https://crm.jibunbank.example/api/v1/summaries',
 });
 
+// U-06 Self-Improvement Pipeline: weekly Contact Lens low-quality detection +
+// knowledge-gap analysis + prioritised improvement suggestion generation.
+new ImprovementStack(app, `AuJibunBank-${env}-Improvement`, {
+  env: cdkEnv,
+  envName: env,
+  description: `au Jibun Bank AI Agent — Self-Improvement Pipeline (U-06) (${env})`,
+});
+
 // ---------------------------------------------------------------------------
-// Placeholders for the remaining follow-on unit stacks. These are intentionally
-// commented out; each unit will instantiate its own stack and consume the
-// SharedInfraStack exports via SSM Parameter Store.
+// Placeholder for the remaining follow-on unit stack. Intentionally commented
+// out; the unit will instantiate its own stack and consume the SharedInfraStack
+// exports via SSM Parameter Store.
 //
-//   new ImprovementStack(app, `AuJibunBank-${env}-Improvement`, { ... });                      // U-06
 //   new OpsStack(app, `AuJibunBank-${env}-Ops`, { ... });                                      // U-07 (ops/dashboards)
 // ---------------------------------------------------------------------------
 

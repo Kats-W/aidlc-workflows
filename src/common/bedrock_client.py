@@ -15,7 +15,12 @@ from typing import Any
 from aws_lambda_powertools import Logger
 from botocore.exceptions import ClientError
 
-from src.common.errors import BedrockError, BedrockThrottledError, EmbeddingError
+from src.common.errors import (
+    BedrockError,
+    BedrockThrottledError,
+    EmbeddingError,
+    ResponseParseError,
+)
 
 logger = Logger()
 
@@ -161,15 +166,175 @@ class BedrockClient:
         )
         return answer, source_urls
 
-    async def analyze_gap(self, prompt: str) -> dict[str, Any]:
-        """Analyse a knowledge gap (U-06).
+    async def generate_suggestion(self, category: str, max_chars: int = 200) -> str:
+        """Generate a concise (<= ``max_chars``) improvement suggestion (U-06).
 
-        Placeholder implementation returning a structured stub. The full
-        implementation belongs to U-06; it is declared here so the shared
-        ``BedrockClient`` surface is stable.
+        Asks Claude Sonnet 4.6 for a short, actionable Japanese website / FAQ
+        improvement suggestion for a confusing topic ``category``. The result is
+        truncated defensively to ``max_chars`` characters.
+
+        Raises:
+            BedrockThrottledError: If Bedrock throttles the request (retryable).
+            BedrockError: If the request fails or returns no text.
         """
-        logger.debug("analyze_gap called (placeholder)", extra={"chars": len(prompt)})
-        return {"gap": "", "suggestion": "", "confidence": 0.0}
+        prompt = (
+            "あなたは au じぶん銀行のナレッジ改善担当です. "
+            f"以下のトピックについて, 顧客が理解しやすくなるための"
+            f"ウェブサイト/FAQ の改善案を{max_chars}字以内の日本語で1つ提案してください"
+            "(前置き・箇条書き記号は不要, 改善案の本文のみ). \n\n"
+            f"トピック: {category}"
+        )
+        payload = json.dumps(
+            {
+                "anthropic_version": ANTHROPIC_VERSION,
+                "max_tokens": 512,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        )
+
+        def _invoke() -> str:
+            try:
+                response = self._client.invoke_model(
+                    modelId=ANSWER_MODEL_ID,
+                    accept="application/json",
+                    contentType="application/json",
+                    body=payload,
+                )
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code in _THROTTLE_CODES:
+                    raise BedrockThrottledError(
+                        f"Bedrock throttled generate_suggestion: {code}"
+                    ) from exc
+                raise BedrockError(
+                    f"Bedrock generate_suggestion failed: {code}"
+                ) from exc
+
+            try:
+                body = json.loads(response["body"].read())
+                blocks = body["content"]
+                text = "".join(
+                    b.get("text", "") for b in blocks if b.get("type") == "text"
+                )
+            except (KeyError, ValueError, TypeError) as exc:
+                raise BedrockError(
+                    "malformed Bedrock generate_suggestion response"
+                ) from exc
+
+            if not text.strip():
+                raise BedrockError("Bedrock returned an empty suggestion")
+            return text.strip()
+
+        text = await asyncio.to_thread(_invoke)
+        return text[:max_chars]
+
+    async def analyze_gap(self, summaries: list[str]) -> dict[str, Any]:
+        """Analyse knowledge gaps from PII-masked conversation summaries (U-06).
+
+        Sends only the (already PII-masked) conversation summaries to Claude
+        Sonnet 4.6 and asks it to classify the topics customers struggled to
+        understand. The model is required to answer with a strict JSON object::
+
+            {"categories": [{"name": str, "count": int, "avg_difficulty": float}]}
+
+        Args:
+            summaries: PII-masked conversation summaries (raw transcripts are
+                never passed). At most the first 50 are forwarded to the model.
+
+        Returns:
+            The parsed ``{"categories": [...]}`` mapping.
+
+        Raises:
+            BedrockThrottledError: If Bedrock throttles the request (retryable).
+            ResponseParseError: If the model response is not valid JSON of the
+                expected shape.
+            BedrockError: If the request otherwise fails or returns no text.
+        """
+        prompt = self._build_gap_prompt(summaries)
+        payload = json.dumps(
+            {
+                "anthropic_version": ANTHROPIC_VERSION,
+                "max_tokens": 1024,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        )
+
+        def _invoke() -> str:
+            try:
+                response = self._client.invoke_model(
+                    modelId=ANSWER_MODEL_ID,
+                    accept="application/json",
+                    contentType="application/json",
+                    body=payload,
+                )
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code in _THROTTLE_CODES:
+                    raise BedrockThrottledError(
+                        f"Bedrock throttled analyze_gap: {code}"
+                    ) from exc
+                raise BedrockError(f"Bedrock analyze_gap failed: {code}") from exc
+
+            try:
+                body = json.loads(response["body"].read())
+                blocks = body["content"]
+                text = "".join(
+                    b.get("text", "") for b in blocks if b.get("type") == "text"
+                )
+            except (KeyError, ValueError, TypeError) as exc:
+                raise BedrockError("malformed Bedrock analyze_gap response") from exc
+
+            if not text.strip():
+                raise BedrockError("Bedrock returned an empty analyze_gap response")
+            return text
+
+        text = await asyncio.to_thread(_invoke)
+        parsed = self._parse_gap_json(text)
+        logger.info(
+            "analyzed knowledge gaps",
+            extra={
+                "summaries": len(summaries),
+                "categories": len(parsed.get("categories", [])),
+            },
+        )
+        return parsed
+
+    @staticmethod
+    def _build_gap_prompt(summaries: list[str]) -> str:
+        """Assemble the Japanese gap-analysis prompt from PII-masked summaries."""
+        joined = "\n".join(f"- {s}" for s in summaries[:50])
+        return (
+            "以下の会話サマリー群(PII除去済み)を分析し, "
+            "顧客が理解しにくかったトピックを分類してください. \n\n"
+            f"会話サマリー:\n{joined or '(サマリーなし)'}\n\n"
+            "以下のJSON形式のみで回答してください(説明文不要):\n"
+            '{"categories": [{"name": "トピック名", "count": 件数, '
+            '"avg_difficulty": 1.0-5.0スコア}]}'
+        )
+
+    @staticmethod
+    def _parse_gap_json(text: str) -> dict[str, Any]:
+        """Parse the model's JSON response, tolerating surrounding prose.
+
+        Raises:
+            ResponseParseError: If no valid JSON object can be extracted.
+        """
+        candidate = text.strip()
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start == -1 or end == -1 or end < start:
+            raise ResponseParseError("analyze_gap response contained no JSON object")
+        try:
+            parsed = json.loads(candidate[start : end + 1])
+        except (ValueError, TypeError) as exc:
+            raise ResponseParseError("analyze_gap response was not valid JSON") from exc
+        if not isinstance(parsed, dict) or not isinstance(
+            parsed.get("categories"), list
+        ):
+            raise ResponseParseError(
+                "analyze_gap JSON missing a 'categories' list"
+            )
+        return parsed
 
     @staticmethod
     def _dedupe_sources(context_chunks: list[dict[str, Any]]) -> list[str]:
@@ -192,9 +357,9 @@ class BedrockClient:
             if str(c.get("text") or "").strip()
         )
         parts: list[str] = [
-            "あなたは au じぶん銀行のカスタマーサポート AI です。"
-            "以下の参考情報のみに基づき、お客さまの質問に丁寧な日本語で回答してください。"
-            "参考情報に答えが含まれない場合は、推測せず「わかりかねます」と回答してください。",
+            "あなたは au じぶん銀行のカスタマーサポート AI です. "
+            "以下の参考情報のみに基づき, お客さまの質問に丁寧な日本語で回答してください. "
+            "参考情報に答えが含まれない場合は, 推測せず「わかりかねます」と回答してください. ",
         ]
         if history_text.strip():
             parts.append(f"# 過去の会話\n{history_text.strip()}")

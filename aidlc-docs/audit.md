@@ -2,6 +2,13 @@
 
 ---
 
+## U-06 Self-Improvement Pipeline — Complete
+**Timestamp**: 2026-06-03T03:00:00Z
+**AI Response**: U-06 を Dynamic Workflow で一括生成。設計4フェーズ（functional-design / nfr-requirements / nfr-design / infrastructure-design）+ code-generation-plan を作成。実装: ContactLensAnalyzerLambda（EventBridge 週次 Mon 03:00 JST、Contact Lens サマリー属性のみ参照=PIIセーフ、低品質判定 CSAT≤2/escalation/NEGATIVE≥0.7、指数バックオフ最大3回、ContactAnalysis batch 保存、GapAnalyzer 連鎖 invoke）、GapAnalyzerLambda（ContactAnalysis Query → SUMMARY# マスク済みサマリー取得 → BedrockClient.analyze_gap で Claude トピック分類、わかりにくさスコア=(count/total)*escalation_rate*avg_difficulty 降順、BedrockThrottled バックオフ最大3回）、SuggestionGeneratorLambda（最大10件・gsi_status で pending 重複スキップ・generate_suggestion ≤200字・TTL90日・条件付き PutItem）。BedrockClient.analyze_gap を placeholder から実装（JSON 抽出 + ResponseParseError）、generate_suggestion 追加、embed/generate_answer 互換維持。ImprovementStack（3 Lambda・EventBridge Scheduler cron(0 18 ? * SUN)・CloudWatch アラーム×3・最小権限 IAM・Sonnet モデル ARN 限定）を app.ts に登録。テスト improvement_generator 36件・全体282件パス、カバレッジ91%、ruff/mypy クリーン、tsc クリーン、cdk synth 成功。PBT: スコア単調性・生成数0〜10。対象: US-3.1 / US-3.2 / US-3.3。
+**Context**: CONSTRUCTION — U-06 完了。
+
+---
+
 ## U-05 SDK & Customer Profile — Complete
 **Timestamp**: 2026-06-03T02:00:00Z
 **AI Response**: U-05 を Dynamic Workflow で一括生成。設計 4 フェーズ（functional-design / nfr-requirements / nfr-design / infrastructure-design）+ code-generation-plan を作成。実装: IdentityHasher（SHA-256 au ID→customerId、平文非ログ）、CustomerProfileLambda（Connect 属性→GSI gsi-customer-id でプロファイル/tier 参照、6秒バジェット、anonymous 降格、never-raise）、CrmWriterLambda+CrmClient（SQS トリガー、httpx 非同期 POST、Secrets Manager キーキャッシュ、指数バックオフ 2s→4s→8s 最大3回、4xx 終端、5xx リトライ、DLQ 退避、anonymous スキップ）。ProfileStack（2 Lambda・SQS+DLQ KMS暗号化・CloudWatch アラーム・最小権限 IAM）を app.ts に登録。テスト profile 28 件・全体 246 件パス、profile カバレッジ 89%、ruff/mypy クリーン、tsc クリーン、cdk synth 成功。対象: US-5.1 / US-5.2 / US-6.3。
