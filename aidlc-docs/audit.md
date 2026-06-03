@@ -84,6 +84,13 @@
 
 ---
 
+## U-01 Construction Design — Complete (Awaiting Approval)
+**Timestamp**: 2026-06-03T00:00:00Z
+**AI Response**: U-01 Core Infrastructure の 4 設計フェーズ（Functional Design / NFR Requirements / NFR Design / Infrastructure Design）を Opus で一括生成。計 13 ファイル。全フェーズまとめてユーザー承認待ち。
+**Context**: CONSTRUCTION — U-01、設計フェーズ完了。コード生成前の最終確認。
+
+---
+
 ## Units Generation — Planning Q&A
 **Timestamp**: 2026-06-02T23:00:00Z
 **User Input**: "全てA案でお願いします"
