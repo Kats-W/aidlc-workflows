@@ -1,10 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+.coverage
+coverage.xml
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+
+# uv
+uv.lock
+
+# CDK
+infra/node_modules/
+infra/cdk.out/
+infra/package-lock.json
+infra/*.js
+infra/*.d.ts
+infra/bin/*.js
+infra/bin/*.d.ts
+infra/lib/**/*.js
+infra/lib/**/*.d.ts
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
 .DS_Store
-.amazonq/**
-.claude/**
-!.claude/settings.json
-.codebuild/**
-.worktrees/**
-.vscode/**
+Thumbs.db
+
+# Environment
 .env
-buildspec.yml
-codebuild_build.sh
+.env.*

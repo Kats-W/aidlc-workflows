@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ "main" ]
   push:
-    branches: [ "main" ]
+    branches: [ "main", "claude/**" ]
   workflow_dispatch:
 
 permissions: {}
@@ -24,3 +24,34 @@ jobs:
       - uses: DavidAnson/markdownlint-cli2-action@ce4853d43830c74c1753b39f3cf40f71c2031eb9 #v23.0.0
         with:
           globs: "**/*.md"
+
+  python-ci:
+    name: Python CI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: '3.12'
+      - run: uv sync --all-extras
+      - run: uv run ruff check .
+      - run: uv run mypy src tests
+      - run: uv run pytest tests/unit --cov=src --cov-report=xml -v
+
+  cdk-ci:
+    name: CDK CI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npx cdk synth --context env=dev 2>&1
