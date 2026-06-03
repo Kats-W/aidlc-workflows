@@ -6,6 +6,7 @@ import { ConversationStack } from '../lib/stacks/conversation_stack';
 import { OmnichannelStack } from '../lib/stacks/omnichannel_stack';
 import { ProfileStack } from '../lib/stacks/profile_stack';
 import { ImprovementStack } from '../lib/stacks/improvement_stack';
+import { DashboardStack } from '../lib/stacks/dashboard_stack';
 
 const app = new cdk.App();
 
@@ -66,13 +67,13 @@ new ImprovementStack(app, `AuJibunBank-${env}-Improvement`, {
   description: `au Jibun Bank AI Agent — Self-Improvement Pipeline (U-06) (${env})`,
 });
 
-// ---------------------------------------------------------------------------
-// Placeholder for the remaining follow-on unit stack. Intentionally commented
-// out; the unit will instantiate its own stack and consume the SharedInfraStack
-// exports via SSM Parameter Store.
-//
-//   new OpsStack(app, `AuJibunBank-${env}-Ops`, { ... });                                      // U-07 (ops/dashboards)
-// ---------------------------------------------------------------------------
+// U-07 Admin Dashboard: Cognito-protected HTTP API + React SPA for reviewing
+// weekly improvement suggestions and viewing usage metrics.
+new DashboardStack(app, `AuJibunBank-${env}-Dashboard`, {
+  env: cdkEnv,
+  envName: env,
+  description: `au Jibun Bank AI Agent — Admin Dashboard (U-07) (${env})`,
+});
 
 cdk.Tags.of(app).add('Project', 'au-jibun-bank-ai-agent');
 cdk.Tags.of(app).add('Environment', env);

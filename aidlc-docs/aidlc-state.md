@@ -4,7 +4,7 @@
 - **Project Name**: au Jibun Bank AI Agent
 - **Project Type**: Greenfield
 - **Start Date**: 2026-06-01T22:40:00Z
-- **Current Stage**: CONSTRUCTION PHASE — U-06 Self-Improvement Pipeline (COMPLETE)
+- **Current Stage**: CONSTRUCTION PHASE — U-07 Admin Dashboard (COMPLETE) — Per-Unit Loop COMPLETE
 - **Depth Level**: Comprehensive
 
 ## Workspace State
@@ -35,13 +35,14 @@
 - [x] Units Generation (COMPLETE)
 
 ### CONSTRUCTION PHASE
-- [x] Per-Unit Loop (in progress)
+- [x] Per-Unit Loop (COMPLETE)
   - [x] U-01 Core Infrastructure — COMPLETE
   - [x] U-02 Knowledge Pipeline — COMPLETE
   - [x] U-03 Conversation Engine — COMPLETE
   - [x] U-04 Omnichannel & Escalation — COMPLETE
   - [x] U-05 SDK & Customer Profile — COMPLETE
   - [x] U-06 Self-Improvement Pipeline — COMPLETE
+  - [x] U-07 Admin Dashboard — COMPLETE
 - [ ] Build and Test (per-unit verified; project-wide gate pending)
 
 ### OPERATIONS PHASE

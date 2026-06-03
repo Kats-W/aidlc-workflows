@@ -2,6 +2,13 @@
 
 ---
 
+## U-07 Admin Dashboard — Complete
+**Timestamp**: 2026-06-03T04:00:00Z
+**AI Response**: U-07 を Dynamic Workflow で一括生成。設計4フェーズ（functional-design / nfr-requirements / nfr-design / infrastructure-design）+ code-generation-plan を作成。実装: DashboardApiLambda（HTTP API payload v2 ルーティング、GET /suggestions=gsi_week Query→priorityScore 降順→サーバーページング/totalPages、PATCH /suggestions/{id}=approved/rejected/hold 検証 + 条件付き UpdateItem で 404、GET /metrics=MetricsAggregator 同期 invoke、GET /suggestions/csv=CSV インジェクション対策、AppError→404/400/403/500 マッピング）、MetricsAggregatorLambda（CustomerHistory SUMMARY# 期間集計=チャネル別/エスカレーション率/avgCsat=None許容/平均ターン/AI解決率、0件は0/null・never-raise）。React SPA（Vite + withAuthenticator + Recharts、ApiClient=IDトークン付与+401 forceRefresh 1回再試行、SuggestionListView/MetricsView/SuggestionStatusControl に data-testid 付与、週セレクタ最大12週）。DashboardStack（Cognito UserPool MFA OPTIONAL TOTP/password min8 強度/advancedSecurity、SPA client secretなし、HTTP API L1 + JWT authorizer、2 Lambda、EventBridge cron(30 18 ? * SUN)、Amplify CfnApp 設定のみ、CloudWatch アラーム×2、最小権限 IAM、SSM 出力×4）を app.ts に登録（U-07 プレースホルダー置換）。テスト dashboard_api 24件・全体306件パス、dashboard_api カバレッジ92%、ruff/mypy クリーン、tsc クリーン、cdk synth 成功。PBT: total/limit→totalPages 整合性。metrics 0件境界テスト必須を充足。対象: US-7.1 / US-7.2 / US-7.3。
+**Context**: CONSTRUCTION — U-07 完了。Per-Unit Loop 完了。
+
+---
+
 ## U-06 Self-Improvement Pipeline — Complete
 **Timestamp**: 2026-06-03T03:00:00Z
 **AI Response**: U-06 を Dynamic Workflow で一括生成。設計4フェーズ（functional-design / nfr-requirements / nfr-design / infrastructure-design）+ code-generation-plan を作成。実装: ContactLensAnalyzerLambda（EventBridge 週次 Mon 03:00 JST、Contact Lens サマリー属性のみ参照=PIIセーフ、低品質判定 CSAT≤2/escalation/NEGATIVE≥0.7、指数バックオフ最大3回、ContactAnalysis batch 保存、GapAnalyzer 連鎖 invoke）、GapAnalyzerLambda（ContactAnalysis Query → SUMMARY# マスク済みサマリー取得 → BedrockClient.analyze_gap で Claude トピック分類、わかりにくさスコア=(count/total)*escalation_rate*avg_difficulty 降順、BedrockThrottled バックオフ最大3回）、SuggestionGeneratorLambda（最大10件・gsi_status で pending 重複スキップ・generate_suggestion ≤200字・TTL90日・条件付き PutItem）。BedrockClient.analyze_gap を placeholder から実装（JSON 抽出 + ResponseParseError）、generate_suggestion 追加、embed/generate_answer 互換維持。ImprovementStack（3 Lambda・EventBridge Scheduler cron(0 18 ? * SUN)・CloudWatch アラーム×3・最小権限 IAM・Sonnet モデル ARN 限定）を app.ts に登録。テスト improvement_generator 36件・全体282件パス、カバレッジ91%、ruff/mypy クリーン、tsc クリーン、cdk synth 成功。PBT: スコア単調性・生成数0〜10。対象: US-3.1 / US-3.2 / US-3.3。
