@@ -1,0 +1,102 @@
+# U-02 Business Logic Model — Knowledge Pipeline
+
+本ドキュメントは U-02 の中核ビジネスロジック（週次クロール・差分検出・コサイン
+類似度検索）のフローを定義する。
+
+---
+
+## 1. 週次クロールフロー（US-2.1）
+
+```
+EventBridge Scheduler (週次 Sun 02:00 JST)
+        │
+        ▼
+  CrawlerLambda.handler
+        │
+        ├─ CRAWLER_TARGET_URLS (env, JSON list) を読み込み
+        │
+        ├─ ホスト単位で RobotsTxtGuard.load()  ← httpx で robots.txt 取得
+        │
+        └─ 各 URL について:
+              ├─ guard.is_allowed(url) が False → スキップ
+              ├─ httpx.AsyncClient.get(url)         ← User-Agent: AuJibunBankBot/1.0
+              ├─ ContentParser.parse(html, url)     → list[ContentChunk]
+              ├─ 各チャンク本文を S3ContentStore.put()
+              └─ asyncio.sleep(uniform(1,3))        ← polite delay
+```
+
+- すべての I/O は `async def`。boto3 の同期呼び出しは `asyncio.to_thread` でオフロード。
+- 1 URL の失敗（fetch / parse）は `errors[]` に記録し、クロール全体は継続する。
+
+---
+
+## 2. 差分検出フロー（US-2.2）
+
+```
+全チャンク (list[ContentChunk])
+        │
+        ▼
+ DifferEngine.diff(new_chunks)
+        │
+        ├─ ContentDiff テーブルを scan → {chunkId: contentHash} (stored)
+        │
+        └─ 各 new チャンクを分類:
+              ├─ stored に無い            → added
+              ├─ contentHash が異なる      → changed
+              └─ (stored にあり new に無い) → deleted
+        │
+        ▼
+ DiffResult(added, changed, deleted)
+        │
+        ├─ DifferEngine.commit() で ContentDiff を最新化（upsert / delete）
+        └─ result が空でなければ EmbedderLambda を非同期 Invoke
+```
+
+### EmbedderLambda フロー
+
+```
+EmbedderLambda.handler(payload={upsert:[...], delete:[...]})
+        │
+        ├─ upsert 各チャンク: BedrockClient.embed(text) → list[float](1024)
+        │                     VectorStore.upsert(chunk, vector)
+        └─ delete 各 chunkId: VectorStore.delete(chunkId)
+        ▼
+   {"upserted": int, "deleted": int}
+```
+
+---
+
+## 3. コサイン類似度検索フロー（US-2.3）
+
+```
+CosineSimilaritySearcher.search(query_vec, top_k)
+        │
+        ├─ _load_vectors()
+        │     ├─ /tmp キャッシュ有効（TTL 900s 以内）? → .npy + JSON をロード
+        │     └─ 無効 → VectorStore.scan_all() → matrix 構築 → /tmp に保存
+        │
+        ├─ _cosine_top_k(matrix, query, k)   ← numpy ベクトル演算
+        │     scores = (matrix @ query) / (‖row‖ · ‖query‖)
+        │     argpartition で top-k → 降順ソート
+        │
+        ▼
+   list[SearchHit]  (chunk_id, source_url, text, score)
+```
+
+- キャッシュは numpy `.npy`（行列）+ JSON（メタ）+ timestamp テキストの 3 ファイル。
+- pickle は使用しない（セキュリティ要件）。
+- Lambda ウォームスタート間は /tmp を再利用し、DynamoDB 全件スキャンを回避。
+
+---
+
+## 4. コンポーネント間の協調
+
+| コンポーネント | 責務 | 依存 |
+| --- | --- | --- |
+| `RobotsTxtGuard` | robots.txt 取得・許可判定 | httpx |
+| `ContentParser` | HTML 抽出・チャンク化・ハッシュ | BeautifulSoup4 |
+| `DifferEngine` | 差分検出・ContentDiff 同期 | DynamoDB |
+| `S3ContentStore` | チャンク本文の永続化 | S3 |
+| `BedrockClient` | Titan v2 埋め込み生成 | Bedrock Runtime |
+| `VectorStore` | ベクトル CRUD・全件スキャン | DynamoDB |
+| `CosineSimilaritySearcher` | コサイン top-k 検索・/tmp キャッシュ | numpy, VectorStore |

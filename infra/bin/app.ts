@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
 import { SharedInfraStack } from '../lib/stacks/shared_infra_stack';
+import { KnowledgePipelineStack } from '../lib/stacks/knowledge_pipeline_stack';
 
 const app = new cdk.App();
 
@@ -19,12 +20,22 @@ new SharedInfraStack(app, `AuJibunBank-${env}-SharedInfra`, {
   description: `au Jibun Bank AI Agent — Shared core infrastructure (${env})`,
 });
 
+// U-02 Knowledge Pipeline: weekly crawl + diff + Titan v2 embedding.
+new KnowledgePipelineStack(app, `AuJibunBank-${env}-KnowledgePipeline`, {
+  env: cdkEnv,
+  envName: env,
+  description: `au Jibun Bank AI Agent — Knowledge Pipeline (U-02) (${env})`,
+  targetUrls: [
+    'https://www.jibunbank.co.jp/',
+    'https://www.jibunbank.co.jp/faq/',
+  ],
+});
+
 // ---------------------------------------------------------------------------
-// Placeholders for the six follow-on unit stacks. These are intentionally
+// Placeholders for the remaining follow-on unit stacks. These are intentionally
 // commented out; each unit will instantiate its own stack and consume the
 // SharedInfraStack exports via SSM Parameter Store.
 //
-//   new CrawlerStack(app, `AuJibunBank-${env}-Crawler`, { env: cdkEnv, envName: env });        // U-02
 //   new ChatStack(app, `AuJibunBank-${env}-Chat`, { env: cdkEnv, envName: env });              // U-03
 //   new ContactAnalysisStack(app, `AuJibunBank-${env}-ContactAnalysis`, { ... });              // U-04
 //   new CrmIntegrationStack(app, `AuJibunBank-${env}-CrmIntegration`, { ... });                // U-05
