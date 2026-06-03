@@ -92,6 +92,14 @@
 
 ---
 
+## U-01 Code Generation — Approval
+**Timestamp**: 2026-06-03T01:30:00Z
+**User Input**: "OK、dynamic workflowを使って一気にrequirementsやuserstoriesを達成しつついきましょう"
+**Status**: Approved。Dynamic Workflow（設計+コード一括生成、単体承認省略）で U-02〜U-07 を連続実行。
+**Context**: CONSTRUCTION — U-01 完了。U-02 Knowledge Pipeline から Dynamic Workflow 開始。
+
+---
+
 ## U-01 Code Generation — Complete
 **Timestamp**: 2026-06-03T01:00:00Z
 **AI Response**: 16ファイル生成・ruff fix・mypy・pytest 140件全パス確認後コミット。AppError 25クラス、SharedInfraStack（DynamoDB×5・KMS・S3・Connect・Lex・SSM×14）、GitHub Actions CI/CD。
