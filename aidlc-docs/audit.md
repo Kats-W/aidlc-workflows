@@ -92,6 +92,13 @@
 
 ---
 
+## U-01 Code Generation — Complete
+**Timestamp**: 2026-06-03T01:00:00Z
+**AI Response**: 16ファイル生成・ruff fix・mypy・pytest 140件全パス確認後コミット。AppError 25クラス、SharedInfraStack（DynamoDB×5・KMS・S3・Connect・Lex・SSM×14）、GitHub Actions CI/CD。
+**Context**: CONSTRUCTION — U-01 Code Generation 完了。
+
+---
+
 ## U-01 Construction Design — Complete (Awaiting Approval)
 **Timestamp**: 2026-06-03T00:00:00Z
 **AI Response**: U-01 Core Infrastructure の 4 設計フェーズ（Functional Design / NFR Requirements / NFR Design / Infrastructure Design）を Opus で一括生成。計 13 ファイル。全フェーズまとめてユーザー承認待ち。
