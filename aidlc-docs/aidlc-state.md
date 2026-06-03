@@ -4,7 +4,7 @@
 - **Project Name**: au Jibun Bank AI Agent
 - **Project Type**: Greenfield
 - **Start Date**: 2026-06-01T22:40:00Z
-- **Current Stage**: CONSTRUCTION PHASE — U-07 Admin Dashboard (COMPLETE) — Per-Unit Loop COMPLETE
+- **Current Stage**: OPERATIONS PHASE — CI/CD 設定完了、dev 環境デプロイ待ち
 - **Depth Level**: Comprehensive
 
 ## Workspace State
@@ -46,4 +46,7 @@
 - [ ] Build and Test (per-unit verified; project-wide gate pending)
 
 ### OPERATIONS PHASE
-- [ ] Operations (placeholder)
+- [x] CI/CD Pipeline (GitHub OIDC + CDK auto-deploy — COMPLETE)
+- [ ] dev 環境デプロイ確認（Actions 実行中）
+- [ ] Amazon Connect コンタクトフロー設定
+- [ ] エンドツーエンド動作確認
