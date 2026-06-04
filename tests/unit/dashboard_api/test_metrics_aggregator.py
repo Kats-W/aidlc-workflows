@@ -53,7 +53,7 @@ def _put(
     }
     if csat is not None:
         item["csatScore"] = csat
-    boto3.resource("dynamodb", region_name="ap-northeast-1").Table(TABLE).put_item(Item=item)
+    boto3.resource("dynamodb", region_name="ap-northeast-1").Table(TABLE).put_item(Item=item)  # type: ignore[arg-type]
 
 
 @pytest.fixture(autouse=True)

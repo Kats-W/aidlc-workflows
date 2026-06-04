@@ -57,9 +57,9 @@ def test_higher_score_ranks_higher(counts: list[int]) -> None:
         }
         for i, c in enumerate(counts)
     ]
-    gaps.sort(key=lambda g: g["score"], reverse=True)
+    gaps.sort(key=lambda g: g["score"], reverse=True)  # type: ignore[arg-type,return-value]
     scores = [g["score"] for g in gaps]
-    assert scores == sorted(scores, reverse=True)
+    assert scores == sorted(scores, reverse=True)  # type: ignore[type-var]
 
 
 # --------------------------------------------------------------------------- #
@@ -84,7 +84,7 @@ class _FakeBedrock:
 async def test_analyze_with_backoff_retries() -> None:
     fake = _FakeBedrock(fail_times=2, categories=[{"name": "x", "count": 1, "avg_difficulty": 3.0}])
     with patch.object(ga.asyncio, "sleep"):
-        out = await ga._analyze_with_backoff(fake, ["s1"])
+        out = await ga._analyze_with_backoff(fake, ["s1"])  # type: ignore[arg-type]
     assert fake.calls == 3
     assert out["categories"][0]["name"] == "x"
 
@@ -92,7 +92,7 @@ async def test_analyze_with_backoff_retries() -> None:
 async def test_analyze_with_backoff_exhausts() -> None:
     fake = _FakeBedrock(fail_times=5)
     with patch.object(ga.asyncio, "sleep"), pytest.raises(BedrockThrottledError):
-        await ga._analyze_with_backoff(fake, ["s1"])
+        await ga._analyze_with_backoff(fake, ["s1"])  # type: ignore[arg-type]
 
 
 # --------------------------------------------------------------------------- #

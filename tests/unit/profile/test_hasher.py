@@ -34,7 +34,7 @@ def test_deterministic_same_input_same_output(au_id: str) -> None:
 @given(data=st.data())
 def test_distinct_inputs_distinct_hashes(data: st.DataObject) -> None:
     a = data.draw(_valid_au_ids)
-    b = data.draw(_valid_au_ids.filter(lambda s, a=a: s != a))
+    b = data.draw(_valid_au_ids.filter(lambda s: s != a))
     assert IdentityHasher.hash_au_id(a) != IdentityHasher.hash_au_id(b)
 
 
