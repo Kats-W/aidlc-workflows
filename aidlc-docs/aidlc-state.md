@@ -4,7 +4,7 @@
 - **Project Name**: au Jibun Bank AI Agent
 - **Project Type**: Greenfield
 - **Start Date**: 2026-06-01T22:40:00Z
-- **Current Stage**: OPERATIONS PHASE — CI/CD 設定完了、dev 環境デプロイ待ち
+- **Current Stage**: OPERATIONS PHASE — PR #3 マージ済み (main)、Amazon Connect 設定待ち
 - **Depth Level**: Comprehensive
 
 ## Workspace State
@@ -43,10 +43,11 @@
   - [x] U-05 SDK & Customer Profile — COMPLETE
   - [x] U-06 Self-Improvement Pipeline — COMPLETE
   - [x] U-07 Admin Dashboard — COMPLETE
-- [ ] Build and Test (per-unit verified; project-wide gate pending)
+- [x] Build and Test (306 tests pass, ruff/mypy clean — verified by independent sub-agent)
 
 ### OPERATIONS PHASE
 - [x] CI/CD Pipeline (GitHub OIDC + CDK auto-deploy — COMPLETE)
-- [ ] dev 環境デプロイ確認（Actions 実行中）
+- [x] PR #3 マージ → main（squash merge、d16663b）
+- [ ] dev 環境デプロイ確認（GitHub Actions UI で確認: github.com/Kats-W/aidlc-workflows/actions）
 - [ ] Amazon Connect コンタクトフロー設定
 - [ ] エンドツーエンド動作確認
