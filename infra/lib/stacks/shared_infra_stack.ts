@@ -241,7 +241,7 @@ export class SharedInfraStack extends cdk.Stack {
     });
 
     // -----------------------------------------------------------------------
-    // 8. IAM Permission Boundary (Lambda). Always RETAIN. No "*" actions.
+    // 8. IAM Permission Boundary (Lambda).
     //
     // ARN patterns (not Fn::GetAtt) are used here deliberately to avoid a
     // CloudFormation circular dependency:
@@ -252,7 +252,8 @@ export class SharedInfraStack extends cdk.Stack {
     // Using literal ARN patterns breaks the cycle at LambdaPermBoundary.
     // -----------------------------------------------------------------------
     const permissionBoundary = new iam.ManagedPolicy(this, 'LambdaPermBoundary', {
-      managedPolicyName: `${prefix}-lambda-permission-boundary`,
+      // No explicit managedPolicyName: CloudFormation generates one to avoid
+      // AlreadyExists conflicts when redeploying after a failed rollback.
       description: 'Maximum permissions for au Jibun Bank Lambda execution roles',
       statements: [
         new iam.PolicyStatement({
@@ -347,7 +348,7 @@ export class SharedInfraStack extends cdk.Stack {
         }),
       ],
     });
-    permissionBoundary.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+    permissionBoundary.applyRemovalPolicy(dataRemovalPolicy);
 
     // -----------------------------------------------------------------------
     // 9. Shared Lambda execution role (VPC access) + permission boundary
@@ -363,7 +364,7 @@ export class SharedInfraStack extends cdk.Stack {
         ),
       ],
     });
-    lambdaRole.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+    lambdaRole.applyRemovalPolicy(dataRemovalPolicy);
 
     // Grant scoped data-plane access (also covered by the boundary above).
     allTables.forEach((t) => t.grantReadWriteData(lambdaRole));
@@ -377,7 +378,8 @@ export class SharedInfraStack extends cdk.Stack {
     // -----------------------------------------------------------------------
     const connectInstance = new connect.CfnInstance(this, 'ConnectInstance', {
       identityManagementType: 'CONNECT_MANAGED',
-      instanceAlias: `${prefix}-connect`,
+      // No explicit instanceAlias to avoid reuse-cooldown conflicts after rollback.
+      // The instance ARN/ID are exported via SSM for downstream stacks.
       attributes: {
         inboundCalls: true,
         outboundCalls: false,
