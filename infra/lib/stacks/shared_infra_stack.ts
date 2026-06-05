@@ -242,9 +242,15 @@ export class SharedInfraStack extends cdk.Stack {
 
     // -----------------------------------------------------------------------
     // 8. IAM Permission Boundary (Lambda). Always RETAIN. No "*" actions.
+    //
+    // ARN patterns (not Fn::GetAtt) are used here deliberately to avoid a
+    // CloudFormation circular dependency:
+    //   CrawlContent → SharedCmk (encryptionKey)
+    //   SharedCmk    → SharedLambdaRole (key policy via grantEncryptDecrypt)
+    //   SharedLambdaRole → LambdaPermBoundary (permissionsBoundary)
+    //   LambdaPermBoundary → CrawlContent (if bucketArn was Fn::GetAtt)
+    // Using literal ARN patterns breaks the cycle at LambdaPermBoundary.
     // -----------------------------------------------------------------------
-    const tableArns = allTables.flatMap((t) => [t.tableArn, `${t.tableArn}/index/*`]);
-
     const permissionBoundary = new iam.ManagedPolicy(this, 'LambdaPermBoundary', {
       managedPolicyName: `${prefix}-lambda-permission-boundary`,
       description: 'Maximum permissions for au Jibun Bank Lambda execution roles',
@@ -262,19 +268,25 @@ export class SharedInfraStack extends cdk.Stack {
             'dynamodb:DeleteItem',
             'dynamodb:ConditionCheckItem',
           ],
-          resources: tableArns,
+          resources: [
+            `arn:aws:dynamodb:${this.region}:${account}:table/${prefix}-*`,
+          ],
         }),
         new iam.PolicyStatement({
           sid: 'S3Access',
           effect: iam.Effect.ALLOW,
           actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
-          resources: [crawlBucket.bucketArn, `${crawlBucket.bucketArn}/*`],
+          resources: [
+            `arn:aws:s3:::${prefix}-*`,
+          ],
         }),
         new iam.PolicyStatement({
           sid: 'LogsAccess',
           effect: iam.Effect.ALLOW,
           actions: ['logs:CreateLogStream', 'logs:PutLogEvents'],
-          resources: [appLogGroup.logGroupArn, `${appLogGroup.logGroupArn}:*`],
+          resources: [
+            `arn:aws:logs:${this.region}:${account}:log-group:/aws/lambda/${prefix}*`,
+          ],
         }),
         new iam.PolicyStatement({
           sid: 'KmsAccess',
@@ -286,13 +298,14 @@ export class SharedInfraStack extends cdk.Stack {
             'kms:GenerateDataKey*',
             'kms:DescribeKey',
           ],
-          resources: [cmk.keyArn],
+          // KMS key policies govern actual access; boundary uses account-scoped pattern.
+          resources: [`arn:aws:kms:${this.region}:${account}:key/*`],
         }),
         new iam.PolicyStatement({
           sid: 'SecretsAccess',
           effect: iam.Effect.ALLOW,
           actions: ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'],
-          resources: [crmApiKey.secretArn],
+          resources: [`arn:aws:secretsmanager:${this.region}:${account}:secret:${prefix}-*`],
         }),
         new iam.PolicyStatement({
           sid: 'BedrockInvoke',
