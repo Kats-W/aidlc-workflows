@@ -408,7 +408,10 @@ export class SharedInfraStack extends cdk.Stack {
       idleSessionTtlInSeconds: 300,
       botLocales: [
         {
-          localeId: 'ja-JP',
+          // TODO(prod): Lex v2 ja-JP is only available in us-east-1 (not ap-northeast-1).
+          // For production, either deploy the Lex bot to us-east-1 or await regional expansion.
+          // en_US is used here as a shell placeholder to pass CDK deploy in ap-northeast-1.
+          localeId: 'en_US',
           nluConfidenceThreshold: 0.4,
           // Intents are defined in U-03; U-01 only provisions the shell with a
           // minimal fallback intent so the locale is valid.
