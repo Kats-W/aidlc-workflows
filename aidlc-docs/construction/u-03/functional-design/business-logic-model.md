@@ -1,4 +1,5 @@
 # U-03 AI Conversation Engine — Business Logic Model
+
 # （RAG 8秒パイプライン・パーソナライズ・フォールバック）
 
 U-03 は Amazon Connect コンタクトフローから呼び出され、音声（US-1.1）/チャット（US-1.2）の問い合わせに対し RAG で回答を生成する。Connect の Lambda ブロックには 8 秒の応答制約があるため、パイプライン全体を **6 秒の時間予算**でガードする。

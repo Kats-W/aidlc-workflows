@@ -1,4 +1,5 @@
 # U-01 Core Infrastructure — Business Rules
+
 # （インフラ設定ルール）
 
 U-01 が全ユニットに対して強制する設定ルールを定義する。これらは Security Extension のブロッキングルールと整合する。
@@ -8,6 +9,7 @@ U-01 が全ユニットに対して強制する設定ルールを定義する。
 ## 1. IAM 最小権限ルール
 
 ### 1.1 原則
+
 - すべての IAM ロールは **最小権限（least privilege）** で定義する。
 - ワイルドカード `Action: "*"` / `Resource: "*"` を禁止（例外は CloudTrail/Logs 等の AWS 要件のみ、その場合も Condition で絞る）。
 - 各 Lambda 実行ロールには **権限境界（Permission Boundary）ポリシー** を必須付与し、権限の上限を固定する。
@@ -64,6 +66,7 @@ U-01 が全ユニットに対して強制する設定ルールを定義する。
 - `{resource}`: ケバブケースのリソース識別子
 
 例:
+
 ```
 /au-jibun-bank/dev/dynamodb/vector-store-table-name
 /au-jibun-bank/dev/dynamodb/customer-history-table-name
@@ -100,6 +103,7 @@ au-jibun-bank-{env}-{resource}
 ```
 
 例:
+
 - Connect インスタンスエイリアス: `au-jibun-bank-dev-connect`
 - Lex ボット名: `au-jibun-bank-dev-bot`
 - Lex ロケール: `ja-JP`（日本語）

@@ -1,4 +1,5 @@
 # U-03 AI Conversation Engine — NFR Design Patterns
+
 # （指数バックオフ・タイムアウト予算・フォールバック）
 
 U-03 の回復性（resilience）を支える設計パターン。

@@ -24,28 +24,34 @@ U-06 は au Jibun Bank AI Agent の「自己改善サイクル」を担当する
 ## 3. Domain Entities
 
 ### 3.1 Contact Analysis（ContactLens 由来・PII セーフ）
+
 - Amazon Connect Contact Lens の**サマリー属性のみ**を参照（生会話テキストは扱わない）。
 - 正規化形: `{contact_id, csat_score (1-5|None), escalated (bool), overall_sentiment, sentiment_confidence (float), summary_ref}`。
 
 ### 3.2 ContactAnalysis item（DynamoDB）
+
 - PK=`weekStart`（ISO週ラベル `2026-W23`）、SK=`contactId`。
 - 属性: `csatScore` / `escalated` / `overallSentiment` / `sentimentConfidence` / `summaryRef`。
 - 低品質コンタクトのみ保存する。
 
 ### 3.3 Conversation Summary（CustomerHistory）
+
 - `customerId` パーティション内の `sk = "SUMMARY#{contactId}"` アイテム。`gsi_contactId`（PK=contactId, SK=sk）で参照。
 - **PII マスク済み**。Claude へはこのサマリーのみ送信する。
 
 ### 3.4 Knowledge Gap（派生）
+
 - `{category, score, count}`。`score` = わかりにくさスコア。
 
 ### 3.5 ImprovementSuggestion item（DynamoDB）
+
 - PK=`suggestionId`（uuid4）。GSI `gsi_status`（PK=`status`, SK=`priorityScore`）/ `gsi_week`（PK=`weekStart`）。
 - 属性: `status`(`pending`/...)、`weekStart`、`targetUrl`、`improvementText`(≤200字)、`priorityScore`、`createdAt`、`ttl`(now+90日)。
 
 ## 4. Business Logic Model
 
 ### 4.1 ContactLensAnalyzerLambda.handler(event) (US-3.1)
+
 1. `weekStart = current_week_start(now)`、`window = [now-7d, now)`。
 2. `ContactLensReader.list_analyses(start, end)` でサマリー取得（指数バックオフ最大3回、`ContactLensError`）。
 3. 各コンタクトを `_is_low_quality()` で判定: `csat≤2` OR `escalated` OR (`NEGATIVE` AND `confidence≥0.7`)。
@@ -54,6 +60,7 @@ U-06 は au Jibun Bank AI Agent の「自己改善サイクル」を担当する
 6. 戻り値: `{"analyzed": int, "low_quality": int, "weekStart": str}`。
 
 ### 4.2 GapAnalyzerLambda.handler(event) (US-3.2)
+
 1. `event.weekStart` から ContactAnalysis を Query（低品質コンタクト群）。0件なら空で返す。
 2. `escalation_rate = escalated件数 / total`。
 3. 各 `contactId` の `SUMMARY#{contactId}` を `gsi_contactId` で取得（**マスク済みサマリーのみ**）。
@@ -63,6 +70,7 @@ U-06 は au Jibun Bank AI Agent の「自己改善サイクル」を担当する
 7. 戻り値: `{"gaps": [{"category", "score", "count"}], "count": int, "weekStart": str}`。
 
 ### 4.3 SuggestionGeneratorLambda.handler(event) (US-3.3)
+
 1. `event.gaps` をスコア降順で最大10件選択。
 2. `gsi_status` を Query して既存 `pending` の `targetUrl` 集合を取得。
 3. 各 gap について `targetUrl` を導出。既存 pending と重複ならスキップ。

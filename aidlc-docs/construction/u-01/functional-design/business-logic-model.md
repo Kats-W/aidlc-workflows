@@ -1,4 +1,5 @@
 # U-01 Core Infrastructure — Business Logic Model
+
 # （インフラリソース設計ロジック）
 
 > U-01 はアプリケーションのビジネスロジックを持たない純粋インフラユニットである。
@@ -78,6 +79,7 @@
 ```
 
 例:
+
 - `/au-jibun-bank/dev/dynamodb/vector-store-table-name`
 - `/au-jibun-bank/dev/kms/cmk-arn`
 - `/au-jibun-bank/dev/s3/crawl-content-bucket-name`

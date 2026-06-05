@@ -18,7 +18,6 @@ uv.lock
 # CDK
 infra/node_modules/
 infra/cdk.out/
-infra/package-lock.json
 infra/*.js
 infra/*.d.ts
 infra/bin/*.js

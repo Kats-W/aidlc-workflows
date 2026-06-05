@@ -1,4 +1,5 @@
 # U-04 Omnichannel & Escalation — Business Logic Model
+
 # （チャネル切り替え・文脈引き継ぎ・有人エスカレーション）
 
 U-04 はセッション中の音声⇔チャット切り替え（同一 ContactId での文脈引き継ぎ）と、

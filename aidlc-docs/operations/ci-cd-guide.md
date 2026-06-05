@@ -9,7 +9,7 @@ GitHub Actions + AWS OIDC による自動デプロイパイプライン。
 
 ## パイプライン構成
 
-```
+```text
 push to main
   ├── Markdown Lint          (並列)
   ├── Python CI              (並列) ruff → mypy → pytest
@@ -18,7 +18,8 @@ push to main
 ```
 
 デプロイ順序（依存関係に従い直列）:
-```
+
+```text
 SharedInfra → KnowledgePipeline → Conversation → Omnichannel
            → Profile → Improvement → Dashboard
 ```
@@ -31,17 +32,18 @@ SharedInfra → KnowledgePipeline → Conversation → Omnichannel
 
 IAM → Identity providers → Add provider
 
-| 項目 | 値 |
-|---|---|
-| Provider type | OpenID Connect |
-| Provider URL | `https://token.actions.githubusercontent.com` |
-| Audience | `sts.amazonaws.com` |
+| 項目          | 値                                            |
+| ------------- | --------------------------------------------- |
+| Provider type | OpenID Connect                                |
+| Provider URL  | `https://token.actions.githubusercontent.com` |
+| Audience      | `sts.amazonaws.com`                           |
 
 ### 2. AWS: IAM ロール作成
 
 IAM → Roles → Create role → Web identity
 
 **信頼ポリシー**:
+
 ```json
 {
   "Version": "2012-10-17",
@@ -71,8 +73,8 @@ IAM → Roles → Create role → Web identity
 
 Settings → Secrets and variables → Actions → New repository secret
 
-| Name | Value |
-|---|---|
+| Name           | Value                                          |
+| -------------- | -------------------------------------------- |
 | `AWS_ROLE_ARN` | `arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>` |
 
 ---
@@ -112,9 +114,22 @@ cdk-deploy-staging:
 
 ## トラブルシューティング
 
-| 症状 | 原因 | 対処 |
-|---|---|---|
-| `AssumeRoleWithWebIdentity` 403 | OIDC プロバイダー未登録 or trust policy の `sub` 条件ミス | AWS IAM で OIDC プロバイダーと trust policy を確認 |
-| `cdk bootstrap` 失敗 | IAM ロールの権限不足 | `AdministratorAccess` が付与されているか確認 |
-| `cdk deploy` タイムアウト | Lambda Docker バンドルが遅い | Actions のタイムアウト上限（6h）内なら正常 |
-| `cdk synth` は通るが deploy 失敗 | SSM パラメータ不足（前段スタック未デプロイ） | SharedInfra から順番にデプロイされているか確認 |
+**症状**: `AssumeRoleWithWebIdentity` 403
+
+- **原因**: OIDC プロバイダー未登録 or trust policy の `sub` 条件ミス
+- **対処**: AWS IAM で OIDC プロバイダーと trust policy を確認
+
+**症状**: `cdk bootstrap` 失敗
+
+- **原因**: IAM ロールの権限不足
+- **対処**: `AdministratorAccess` が付与されているか確認
+
+**症状**: `cdk deploy` タイムアウト
+
+- **原因**: Lambda Docker バンドルが遅い
+- **対処**: Actions のタイムアウト上限（6h）内なら正常
+
+**症状**: `cdk synth` は通るが deploy 失敗
+
+- **原因**: SSM パラメータ不足（前段スタック未デプロイ）
+- **対処**: SharedInfra から順番にデプロイされているか確認

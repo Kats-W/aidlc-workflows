@@ -1,7 +1,9 @@
 # U-02 Knowledge Pipeline — Code Generation Plan
+
 # au Jibun Bank AI Agent
 
 ## 計画メタデータ
+
 - **ユニット**: U-02 Knowledge Pipeline
 - **フェーズ**: Code Generation
 - **CDK スタック**: `KnowledgePipelineStack`（TypeScript / CDK v2）
@@ -24,6 +26,7 @@
 ## 実行チェックリスト
 
 ### フェーズ A: クローラ Python ソース
+
 - [x] Step A1: `src/crawler/__init__.py`（空）
 - [x] Step A2: `src/crawler/robots.py`（RobotsTxtGuard）
 - [x] Step A3: `src/crawler/parser.py`（ContentParser + ContentChunk）
@@ -32,15 +35,18 @@
 - [x] Step A6: `src/crawler/handler.py`（CrawlerLambda）
 
 ### フェーズ B: ベクトルストア Python ソース
+
 - [x] Step B1: `src/vector_store/__init__.py`（空）
 - [x] Step B2: `src/vector_store/store.py`（VectorStore, Decimal 変換）
 - [x] Step B3: `src/vector_store/searcher.py`（CosineSimilaritySearcher + SearchHit, /tmp キャッシュ）
 - [x] Step B4: `src/vector_store/handler.py`（EmbedderLambda）
 
 ### フェーズ C: 共通 Bedrock クライアント
+
 - [x] Step C1: `src/common/bedrock_client.py`（BedrockClient.embed, Titan v2）
 
 ### フェーズ D: テスト
+
 - [x] Step D1: `tests/unit/crawler/__init__.py`（空）
 - [x] Step D2: `tests/unit/crawler/test_robots.py`（httpx モック・Disallow・失敗）
 - [x] Step D3: `tests/unit/crawler/test_parser.py`（変換・SHA-256・空 HTML・PBT 決定論）
@@ -52,10 +58,12 @@
 - [x] Step D9: `tests/unit/common/test_bedrock_client.py`（embed 正常/エラー）
 
 ### フェーズ E: CDK TypeScript
+
 - [x] Step E1: `infra/lib/stacks/knowledge_pipeline_stack.ts`（KnowledgePipelineStack）
 - [x] Step E2: `infra/bin/app.ts` に U-02 スタックを配線
 
 ### フェーズ F: 確認
+
 - [x] Step F1: `uv run pytest tests/unit/crawler tests/unit/vector_store tests/unit/common/test_bedrock_client.py`（全 38 件 PASS）
 - [x] Step F2: `uv run ruff check`（全 PASS）
 - [x] Step F3: `uv run mypy src`（no issues）

@@ -1,6 +1,7 @@
 # U-02 Knowledge Pipeline — NFR Requirements Plan
 
 ## 計画メタデータ
+
 - **ユニット**: U-02 Knowledge Pipeline
 - **フェーズ**: NFR Requirements
 - **状態**: 確定済みコンテキストから全質問解決済み。
@@ -27,5 +28,6 @@
 ---
 
 ## 主要な判断
+
 1. RAG 検索のレイテンシ予算 8 秒のうち、ベクトル検索は /tmp キャッシュ利用で 200ms 以内を目標。
 2. 差分埋め込みにより週次の Bedrock 呼び出しコストを変更分のみに限定。

@@ -1,4 +1,5 @@
 # U-04 Omnichannel & Escalation — Business Rules
+
 # （ContactId 維持・20ターン上限・PII・エスカレーション）
 
 U-04 が強制するビジネスルール。違反は実装・テストで防止する。

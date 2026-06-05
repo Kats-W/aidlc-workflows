@@ -1,4 +1,5 @@
 # U-03 AI Conversation Engine — Business Rules
+
 # （8秒制約・PII 必須マスク・エスカレーション条件）
 
 U-03 が強制するビジネスルール。U-01 のセキュリティルールおよび Security Extension のブロッキングルールと整合する。

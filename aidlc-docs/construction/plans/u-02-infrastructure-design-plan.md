@@ -1,6 +1,7 @@
 # U-02 Knowledge Pipeline — Infrastructure Design Plan
 
 ## 計画メタデータ
+
 - **ユニット**: U-02 Knowledge Pipeline
 - **フェーズ**: Infrastructure Design
 - **CDK スタック**: `KnowledgePipelineStack`（TypeScript / CDK v2）
@@ -30,6 +31,7 @@
 ---
 
 ## 主要な判断
+
 1. スタック間依存は SSM Parameter Store 経由（CloudFormation Export の硬直化を回避）。
 2. EmbedderLambda を先に定義し、Crawler の環境変数にその関数名を注入。
 3. cron は UTC で記述（Sat 17:00 UTC = Sun 02:00 JST）。

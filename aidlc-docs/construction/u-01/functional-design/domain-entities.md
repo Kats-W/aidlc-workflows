@@ -1,4 +1,5 @@
 # U-01 Core Infrastructure — Domain Entities
+
 # （インフラエンティティ定義）
 
 U-01 が定義・管理するインフラエンティティと、後続ユニットが参照するインターフェース（SSM パラメータ）を確定する。
@@ -29,6 +30,7 @@ U-01 が定義・管理するインフラエンティティと、後続ユニッ
 ## 2. DynamoDB テーブルエンティティ図
 
 ### 2.1 VectorStore
+
 ```
 PK: chunkId (S)
 SK: なし
@@ -39,6 +41,7 @@ GSI: gsi_sourceUrl (PK=sourceUrl)
 ```
 
 ### 2.2 CustomerHistory
+
 ```
 PK: customerId (S)
 SK: sk (S)  — TURN#<ts> / SUMMARY#<contactId> / CSAT#<contactId> / SESSION#<contactId>
@@ -48,6 +51,7 @@ GSI: gsi_contactId (PK=contactId, SK=sk)
 ```
 
 ### 2.3 ImprovementSuggestions
+
 ```
 PK: suggestionId (S)
 SK: なし
@@ -58,6 +62,7 @@ GSI: gsi_status (PK=status, SK=priorityScore), gsi_week (PK=weekStart)
 ```
 
 ### 2.4 ContentDiff
+
 ```
 PK: chunkId (S)
 SK: なし
@@ -67,6 +72,7 @@ GSI: gsi_sourceUrl (PK=sourceUrl)
 ```
 
 ### 2.5 ContactAnalysis
+
 ```
 PK: weekStart (S)
 SK: contactId (S)
@@ -77,6 +83,7 @@ GSI: なし
 ```
 
 ### 2.6 ER 概観（論理）
+
 ```mermaid
 erDiagram
   VectorStore ||--o{ ContentDiff : "same chunkId space"
@@ -115,6 +122,7 @@ erDiagram
 ## 4. Connect / Lex リソーススキーマ
 
 ### 4.1 Connect インスタンス
+
 ```yaml
 ConnectInstance:
   IdentityManagementType: CONNECT_MANAGED   # GUI 初期設定後 JSON import
@@ -129,6 +137,7 @@ ConnectInstance:
 ```
 
 ### 4.2 Lex v2 ボット（外枠）
+
 ```yaml
 LexBot:
   Name: au-jibun-bank-dev-bot

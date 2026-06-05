@@ -33,6 +33,7 @@ uv run pytest tests/unit/dashboard_api/ -v
 ```
 
 ## 禁止事項の遵守
+
 - `pickle` 不使用
 - Python 3.12 型スタイル（`x | None`、`Optional` 不使用、`from __future__ import annotations`）
 - IAM `"*"` アクション不使用（テーブル/index/Aggregator ARN にスコープ）

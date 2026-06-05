@@ -1,6 +1,7 @@
 # U-07 Admin Dashboard — NFR Requirements
 
 ## 1. パフォーマンス
+
 | ID | 要件 |
 |---|---|
 | PERF-01 | `GET /suggestions` は p95 < 1.5s（1週分・最大100件想定）。 |
@@ -9,6 +10,7 @@
 | PERF-04 | 提案一覧のページングはサーバー側で完結し、1ページ既定10件。 |
 
 ## 2. セキュリティ
+
 | ID | 要件 |
 |---|---|
 | SEC-01 | ダッシュボード API は Cognito JWT オーソライザーで保護（US-7.3）。匿名アクセス不可。 |
@@ -20,6 +22,7 @@
 | SEC-07 | レスポンスはレビュー担当者向け管理データのみ。生会話テキスト・未マスク PII を返さない。 |
 
 ## 3. 可用性 / 信頼性
+
 | ID | 要件 |
 |---|---|
 | REL-01 | MetricsAggregator は 0件データでもエラーにせず 0/null を返す。 |
@@ -28,6 +31,7 @@
 | REL-04 | CloudWatch エラーアラームを両 Lambda に設定。 |
 
 ## 4. 運用 / 観測性
+
 | ID | 要件 |
 |---|---|
 | OPS-01 | aws-lambda-powertools Logger による構造化ログ。 |
@@ -35,9 +39,10 @@
 | OPS-03 | SSM に UserPool ID / Client ID / API エンドポイント / Amplify App ID を出力。 |
 
 ## 5. 保守性 / 品質
+
 | ID | 要件 |
 |---|---|
-| QUAL-01 | Python 3.12 型スタイル（`x | None`、`Optional` 禁止）。`pickle` 禁止。 |
+| QUAL-01 | Python 3.12 型スタイル（`x | None`、`Optional`禁止）。`pickle` 禁止。 |
 | QUAL-02 | ユニットテストカバレッジ 80% 以上。0件境界・ページング境界（PBT）必須。 |
 | QUAL-03 | フロントは `data-testid` 属性で E2E テスト可能にする。 |
 | QUAL-04 | CDK TypeScript は `tsc --noEmit` クリーン。 |
