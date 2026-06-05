@@ -56,6 +56,7 @@ Connect 属性へ {answer, sources, escalate} をマップ
 | バッファ | 残余。`TimeoutBudgetExceeded` 時はフォールバック定型応答 + エスカレーション |
 
 ### 設計ポイント
+
 - 履歴保存（append_turn）と CRM 書き込みは応答クリティカルパスから外す（fire-and-forget / コンタクト終了時）。
 - ベクトル検索キャッシュミス時のスキャン遅延を見越し、`top_k` と Claude `max_tokens` を予算から逆算。
 - PII マスク後のテキストのみをログ・DynamoDB・Bedrock へ渡す（SECURITY-03）。
@@ -86,6 +87,7 @@ EventBridge Scheduler（日曜 02:00 JST）
 ```
 
 ### 通信パターン
+
 - CrawlerLambda → EmbedderLambda: 大きな DiffResult は S3 経由で受け渡し、起動は EventBridge カスタムイベント（`knowledge.diff.ready`）または直接 `Invoke`（非同期 `Event` 型）。
 - バッチのため同期応答時間制約なし。Lambda タイムアウトは余裕を持たせる（例: 15 分）。
 
@@ -118,6 +120,7 @@ DashboardService 経由で運用者が承認/却下
 ```
 
 ### 通信パターン
+
 - 3 Lambda はステージ毎に EventBridge カスタムイベントで連鎖（疎結合）。
 - 各ステージ独立リトライ可能（冪等キー = 対象週 `week_start`）。
 
@@ -139,6 +142,7 @@ Connect チャネル切替イベント
 ```
 
 ### 通信パターン
+
 - 同期（Connect Lambda 統合）。8 秒制約適用。
 - セッション文脈は CustomerHistory テーブル（contact_id をキーとするパーティション）で共有。
 
@@ -161,6 +165,7 @@ React (Amplify) → API Gateway（Cognito オーソライザ）
 ```
 
 ### 通信パターン
+
 - 同期 REST。API Gateway アクセスログ有効（SECURITY-02）。
 - MetricsAggregatorLambda は週次 EventBridge での事前集計 + オンデマンド再集計の二系統。
 

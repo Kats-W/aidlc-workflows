@@ -7,6 +7,7 @@ NFR を満たすための具体的な設計パターン。
 ## 1. セキュリティパターン
 
 ### 1.1 IAM Permission Boundary
+
 - 全 Lambda 実行ロールに権限境界ポリシーを付与し、付与可能な権限の上限を固定。
 - 後続ユニットがロールを拡張しても境界を超えられない（権限昇格防止）。
 - 境界 ARN は SSM `/au-jibun-bank/dev/iam/lambda-permission-boundary-arn` で共有。
@@ -19,14 +20,17 @@ flowchart TD
 ```
 
 ### 1.2 KMS CMK 自動ローテーション
+
 - CMK は `enableKeyRotation: true`（自動年次ローテーション）。
 - キーポリシーでルートアカウント + 限定ロールのみ暗号化/復号許可。
 
 ### 1.3 Secrets Manager 自動ローテーション（将来）
+
 - CRM API キーはシークレットとして格納。U-01 ではプレースホルダー定義 + 手動投入。
 - 将来、ローテーション Lambda を追加し自動ローテーション化（設計余地を残す）。
 
 ### 1.4 転送時暗号化
+
 - S3 バケットポリシーで `aws:SecureTransport=false` を Deny（非 TLS 拒否）。
 - 全 AWS API 呼び出しは TLS 1.2 以上。
 

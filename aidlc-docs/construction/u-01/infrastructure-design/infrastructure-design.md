@@ -1,4 +1,5 @@
 # U-01 Core Infrastructure — Infrastructure Design
+
 # SharedInfraStack（`infra/stacks/shared_infra_stack.py` 相当 / CDK v2 TypeScript）
 
 リージョン: ap-northeast-1。本ドキュメントは全リソースの CDK 設計を定義する。

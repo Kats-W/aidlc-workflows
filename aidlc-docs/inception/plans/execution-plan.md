@@ -1,4 +1,5 @@
 # 実行計画（Execution Plan）
+
 # au Jibun Bank AI Agent
 
 **作成日**: 2026-06-02

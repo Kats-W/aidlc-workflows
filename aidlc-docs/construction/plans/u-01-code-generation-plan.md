@@ -1,7 +1,9 @@
 # U-01 Core Infrastructure — Code Generation Plan
+
 # au Jibun Bank AI Agent
 
 ## 計画メタデータ
+
 - **ユニット**: U-01 Core Infrastructure
 - **フェーズ**: Code Generation
 - **CDK スタック**: `SharedInfraStack`（TypeScript / CDK v2）
@@ -14,6 +16,7 @@
 ## ストーリートレーサビリティ
 
 U-01 は **横断的なコアインフラストラクチャ** ユニットであり、機能ユーザーストーリーを直接実装しない。
+
 - 割り当て User Story: **なし**（インフラ基盤のみ）
 - U-01 が提供する基盤（DynamoDB / KMS / S3 / Secrets / VPC / IAM / Connect / Lex / SSM / 共通例外階層）は U-02〜U-06 の全ストーリーから参照される。
 - 例外階層 `src/common/errors.py` は後続全ユニットの共通依存。
@@ -23,12 +26,14 @@ U-01 は **横断的なコアインフラストラクチャ** ユニットであ
 ## 実行チェックリスト
 
 ### フェーズ A: Python プロジェクト基盤
+
 - [x] Step A1: `pyproject.toml` 生成（依存・dev依存・ruff・mypy・pytest 設定）
 - [x] Step A2: `src/__init__.py`（空）
 - [x] Step A3: `src/common/__init__.py`（errors 再エクスポート）
 - [x] Step A4: `src/common/errors.py`（AppError 例外階層 全25クラス: AppError + 24 サブクラス）
 
 ### フェーズ B: Python テスト
+
 - [x] Step B1: `tests/__init__.py`（空）
 - [x] Step B2: `tests/unit/__init__.py`（空）
 - [x] Step B3: `tests/unit/common/__init__.py`（空）
@@ -36,6 +41,7 @@ U-01 は **横断的なコアインフラストラクチャ** ユニットであ
 - [x] Step B5: `tests/unit/common/test_errors_property.py`（hypothesis PBT）
 
 ### フェーズ C: CDK TypeScript インフラ
+
 - [x] Step C1: `infra/package.json`
 - [x] Step C2: `infra/tsconfig.json`
 - [x] Step C3: `infra/cdk.json`
@@ -43,9 +49,11 @@ U-01 は **横断的なコアインフラストラクチャ** ユニットであ
 - [x] Step C5: `infra/lib/stacks/shared_infra_stack.ts`（完全実装 12 リソース群）
 
 ### フェーズ D: CI/CD
+
 - [x] Step D1: `.github/workflows/ci.yml` に `python-ci` / `cdk-ci` ジョブを追加（既存 markdownlint ジョブは保持）
 
 ### フェーズ E: 確認
+
 - [x] Step E1: `pyproject.toml` の TOML 妥当性確認
 - [x] Step E2: `errors.py` の全25クラス定義確認（AppError + 24 サブクラス）
 - [x] Step E3: `shared_infra_stack.ts` の TypeScript 構文精査
@@ -84,4 +92,5 @@ U-01 は **横断的なコアインフラストラクチャ** ユニットであ
 4. **RemovalPolicy**: dev=DESTROY、staging/prod=RETAIN、KMS/IAM 境界=常時 RETAIN。
 5. **IAM 最小権限**: 権限境界はサービス別アクションを列挙し `"*"` アクションを排除。
 </content>
+
 </invoke>

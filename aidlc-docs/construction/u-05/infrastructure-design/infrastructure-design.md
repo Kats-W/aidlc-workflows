@@ -21,6 +21,7 @@ CustomerHistory の ARN はテーブル名から再構成:
 ## 2. リソース
 
 ### 2.1 CustomerProfileLambda
+
 - Runtime Python 3.12 / memory 256MB / timeout **10s**。
 - handler `src.profile.handler.lambda_handler`。
 - env: `CUSTOMER_HISTORY_TABLE_NAME`, `POWERTOOLS_SERVICE_NAME=u-05-customer-profile`,
@@ -28,6 +29,7 @@ CustomerHistory の ARN はテーブル名から再構成:
 - ログ保持 3 ヶ月。
 
 ### 2.2 CrmWriterLambda
+
 - Runtime Python 3.12 / memory 256MB / timeout **30s**。
 - handler `src.profile.crm_writer.lambda_handler`。
 - イベントソース: `CrmWriteQueue`（`SqsEventSource`, batchSize 5）。
@@ -35,12 +37,14 @@ CustomerHistory の ARN はテーブル名から再構成:
   `POWERTOOLS_SERVICE_NAME=u-05-crm-writer`, `LOG_LEVEL=INFO`。
 
 ### 2.3 SQS
+
 - **CrmWriteQueue**: KMS（共有 CMK）暗号化 / `enforceSSL` / 保持 4 日 /
   visibilityTimeout 180s（= CrmWriter タイムアウトの 6 倍）/ redrive: DLQ, maxReceiveCount 3。
 - **CrmWriteDlq**: KMS 暗号化 / `enforceSSL` / **保持 14 日**。アプリ側 `_send_to_dlq` の
   明示送信先かつ SQS redrive 先を兼ねる。
 
 ### 2.4 CloudWatch アラーム
+
 - `CustomerProfileErrorAlarm`: `Errors >= 5`（5 分）。
 - `CrmWriterErrorAlarm`: `Errors >= 3`（5 分）。
 - いずれも `treatMissingData = NOT_BREACHING`。
@@ -48,11 +52,13 @@ CustomerHistory の ARN はテーブル名から再構成:
 ## 3. IAM（最小権限・`"*"` アクション無し）
 
 ### CustomerProfileRole
+
 - `dynamodb:GetItem`, `dynamodb:Query` on CustomerHistory（テーブル + `index/*`）。
 - 共有 CMK `grantEncryptDecrypt`。
 - AWSLambdaBasicExecutionRole（Logs）+ permission boundary。
 
 ### CrmWriterRole
+
 - `sqs:ReceiveMessage|DeleteMessage|GetQueueAttributes` on CrmWriteQueue。
 - `sqs:SendMessage` on CrmWriteDlq。
 - `secretsmanager:GetSecretValue` on CRM API キー ARN。
@@ -62,12 +68,14 @@ CustomerHistory の ARN はテーブル名から再構成:
 ## 4. デプロイ統合
 
 `infra/bin/app.ts`:
+
 ```ts
 new ProfileStack(app, `AuJibunBank-${env}-Profile`, {
   env: cdkEnv, envName: env,
   crmEndpoint: app.node.tryGetContext('crmEndpoint') ?? 'https://crm.jibunbank.example/api/v1/summaries',
 });
 ```
+
 `crmEndpoint` は CDK context（`--context crmEndpoint=...`）で上書き可能。
 
 ## 5. データフロー

@@ -1,4 +1,5 @@
 # U-03 AI Conversation Engine — Infrastructure Design
+
 # （ConversationStack CDK 設計）
 
 `infra/lib/stacks/conversation_stack.ts` の設計。U-01 SharedInfraStack の SSM エクスポートを消費し、最小権限 IAM で 4 つの Lambda を構成する。リージョンは ap-northeast-1。

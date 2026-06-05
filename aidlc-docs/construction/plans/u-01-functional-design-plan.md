@@ -1,7 +1,9 @@
 # U-01 Core Infrastructure — Functional Design Plan
+
 # au Jibun Bank AI Agent
 
 ## 計画メタデータ
+
 - **ユニット**: U-01 Core Infrastructure
 - **フェーズ**: Functional Design
 - **性質**: 純粋インフラユニット（アプリケーションのビジネスロジックなし）。本フェーズの「ビジネスロジック」はインフラリソース設計判断ロジックとして扱う。
@@ -13,16 +15,19 @@
 ## 実行チェックリスト
 
 ### Part 1: スコープ確認
+
 - [x] Step 1: U-01 の責務境界確認（共有基盤リソースの一括定義）
 - [x] Step 2: 担当コンポーネント棚卸し（DynamoDB 5 テーブル / IAM / Secrets / KMS / Logs / Connect / Lex / S3 / AppError）
 - [x] Step 3: スコープ外項目の明示（Lambda 実装・Connect フロー本体・Lex インテント詳細）
 
 ### Part 2: 機能設計ドキュメント生成
+
 - [x] Step 4: business-logic-model.md 生成（インフラ設計判断ロジック）
 - [x] Step 5: business-rules.md 生成（IAM/KMS/DynamoDB/SSM/Logs ルール）
 - [x] Step 6: domain-entities.md 生成（テーブル・バケット・キー・シークレット・SSM パラメータ・Connect/Lex）
 
 ### Part 3: 完了
+
 - [x] Step 7: DoD 整合性チェック（5 テーブル・暗号化・Connect/Lex・AppError）
 - [x] Step 8: 後続ユニットへの参照インターフェース（SSM パラメータ名）確定
 

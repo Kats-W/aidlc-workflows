@@ -1,6 +1,7 @@
 # U-02 Knowledge Pipeline — NFR Design Plan
 
 ## 計画メタデータ
+
 - **ユニット**: U-02 Knowledge Pipeline
 - **フェーズ**: NFR Design
 - **状態**: 確定済みコンテキストから全質問解決済み。
@@ -27,5 +28,6 @@
 ---
 
 ## 主要な判断
+
 1. リトライ可否は例外型の `retryable` 属性で表現し、呼び出し側が型でバックオフ制御。
 2. キャッシュは 3 ファイル（行列 / メタ / timestamp）で TTL を独立管理。

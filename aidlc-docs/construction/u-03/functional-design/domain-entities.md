@@ -1,4 +1,5 @@
 # U-03 AI Conversation Engine — Domain Entities
+
 # （ConversationTurn・RagAnswer・SessionContext）
 
 U-03 の主要ドメインエンティティと、その永続化形式（CustomerHistory テーブル）を定義する。

@@ -1,4 +1,5 @@
 # Unit of Work 分解計画
+
 # au Jibun Bank AI Agent
 
 **作成日**: 2026-06-02
@@ -21,6 +22,7 @@
 | U-07 | Admin Dashboard | DashboardApiLambda、MetricsAggregatorLambda、React Amplify App | M |
 
 依存順序:
+
 ```
 U-01 → U-02 → U-03 → U-04（U-03 後に並列可）
                    → U-05（U-03 後に並列可）
@@ -53,12 +55,14 @@ U-01 → U-02 → U-03 → U-04（U-03 後に並列可）
 ## 明確化が必要な質問
 
 ### Q1: コード組織化方針（ディレクトリ構造）
+
 **カテゴリ**: Code Organization（Greenfield 必須）
 
 現在の技術環境ドキュメントでは `src/` フラット構造が想定されていますが、
 7 ユニット・14 Lambda の規模を踏まえ、以下のどちらを採用しますか？
 
 **A案 — ユニット別パッケージ（推奨）**
+
 ```
 src/
   crawler/        # U-02
@@ -77,6 +81,7 @@ tests/
 ```
 
 **B案 — レイヤー別構造**
+
 ```
 lambdas/          # 全 Lambda ハンドラ（handler.py のみ）
 core/             # ビジネスロジック・リポジトリクラス
@@ -90,11 +95,13 @@ tests/
 ---
 
 ### Q2: CDK スタック分割方針
+
 **カテゴリ**: Technical Considerations
 
 CDK スタックをどう分割しますか？
 
 **A案 — ユニット対応スタック（推奨）**
+
 - `SharedInfraStack`（U-01: VPC, IAM ロール, Secrets Manager, DynamoDB テーブル）
 - `KnowledgePipelineStack`（U-02: CrawlerLambda, EmbedderLambda, EventBridge）
 - `ConversationStack`（U-03: RagHandlerLambda, PersonalizerLambda, Connect 設定）
@@ -104,6 +111,7 @@ CDK スタックをどう分割しますか？
 - `DashboardStack`（U-07: API Gateway, DashboardApiLambda, Amplify/Cognito）
 
 **B案 — 2 スタックに統合**
+
 - `InfraStack`（共有インフラ + DynamoDB 全テーブル）
 - `AppStack`（全 Lambda + API GW + Amplify）
 
@@ -112,6 +120,7 @@ CDK スタックをどう分割しますか？
 ---
 
 ### Q3: U-04 / U-05 の並列開発有無
+
 **カテゴリ**: Team Alignment
 
 実行計画では U-04（Omnichannel）と U-05（SDK & Customer Profile）は U-03 完了後に
@@ -126,11 +135,13 @@ CDK スタックをどう分割しますか？
 ---
 
 ### Q4: テスト戦略とカバレッジ境界
+
 **カテゴリ**: Technical Considerations
 
 ユニットテストのスコープをどう定義しますか？
 
 **A案 — ユニット別テストディレクトリ**
+
 ```
 tests/unit/crawler/
 tests/unit/rag_handler/
@@ -140,6 +151,7 @@ tests/integration/   # ユニット間の統合テスト
 ```
 
 **B案 — ファイル隣接テスト（pytest）**
+
 ```
 src/crawler/handler.py
 src/crawler/test_handler.py  # 同階層に配置
@@ -150,6 +162,7 @@ src/crawler/test_handler.py  # 同階層に配置
 ---
 
 ### Q5: Amazon Connect リソース（コンタクトフロー / Lex Bot）のスコープ
+
 **カテゴリ**: Dependencies
 
 Amazon Connect のコンタクトフロー定義・Lex v2 Bot 設定は CDK で管理しますか？

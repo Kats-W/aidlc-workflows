@@ -22,21 +22,25 @@ U-05 は au Jibun Bank AI Agent における「顧客識別・プロファイル
 ## 3. Domain Entities
 
 ### 3.1 au ID（入力・PII）
+
 - ネイティブアプリ SDK が au ID ログイン済みセッションから取得し、Connect コンタクト属性
   `Details.ContactData.Attributes.auId` として渡す。
 - **PII**。平文での保存・ログ出力は禁止。
 
 ### 3.2 customerId（派生キー）
+
 - `customerId = SHA-256_hex(au_id)`。64 文字小文字 16 進数。
 - 決定論的（ソルト無し）であり、同一 au ID は常に同一 customerId に写像される。
   これにより CustomerHistory のパーティションキーとして横断的に利用できる。
 - au ID が無い／無効な場合のセンチネルは `anonymous`。
 
 ### 3.3 Customer Profile item（CustomerHistory）
+
 - パーティション `customerId`、ソートキー `sk = "PROFILE"`。
 - 属性: `tier`（ロイヤルティ階層など）他。GSI `gsi-customer-id` 経由で参照。
 
 ### 3.4 CRM Summary message（SQS body, JSON）
+
 ```json
 {"customerId": "...", "contactId": "...", "summary": "...", "channel": "chat|voice", "timestamp": "ISO8601"}
 ```
@@ -44,10 +48,12 @@ U-05 は au Jibun Bank AI Agent における「顧客識別・プロファイル
 ## 4. Business Logic Model
 
 ### 4.1 IdentityHasher.hash_au_id(au_id) -> str
+
 1. `au_id` が空または空白のみ → `ValidationError`（メッセージに平文を含めない）。
 2. それ以外 → `sha256(au_id.encode("utf-8")).hexdigest()` を返す。
 
 ### 4.2 CustomerProfileLambda.handler(event) (US-5.1 / US-5.2)
+
 1. `event.Details.ContactData.Attributes.auId` を読む。
 2. 不在／空 → `customer_id = "anonymous"`、即 `{"customer_id": "anonymous", "tier": None, "found": False}`。
 3. 存在 → `IdentityHasher.hash_au_id`。`ValidationError` 時は anonymous へ降格（平文ログ無し）。
@@ -56,6 +62,7 @@ U-05 は au Jibun Bank AI Agent における「顧客識別・プロファイル
 6. 戻り値 `{"customer_id": str, "tier": str | None, "found": bool}`。
 
 ### 4.3 CrmWriterLambda.handler(event) (US-6.3)
+
 1. SQS バッチの各レコードを独立処理。body を JSON パース（失敗 → DLQ）。
 2. `customerId` が空または `anonymous` → スキップ（`written=False`）。
 3. `CrmClient.post_summary(message)`:

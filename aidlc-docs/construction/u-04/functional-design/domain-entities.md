@@ -1,4 +1,5 @@
 # U-04 Omnichannel & Escalation — Domain Entities
+
 # （SessionContext・SESSION# スキーマ・ConversationTurn 再利用）
 
 U-04 の主要ドメインエンティティと CustomerHistory への永続化形式を定義する。
