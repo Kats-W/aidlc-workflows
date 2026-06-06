@@ -346,6 +346,19 @@ export class SharedInfraStack extends cdk.Stack {
           ],
         }),
         new iam.PolicyStatement({
+          sid: 'SqsAccess',
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'sqs:SendMessage',
+            'sqs:ReceiveMessage',
+            'sqs:DeleteMessage',
+            'sqs:GetQueueAttributes',
+            'sqs:GetQueueUrl',
+            'sqs:ChangeMessageVisibility',
+          ],
+          resources: [`arn:aws:sqs:${this.region}:${account}:${prefix}-*`],
+        }),
+        new iam.PolicyStatement({
           sid: 'VpcNetworkInterfaces',
           effect: iam.Effect.ALLOW,
           actions: [
