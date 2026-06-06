@@ -198,6 +198,17 @@ export class SharedInfraStack extends cdk.Stack {
     // -----------------------------------------------------------------------
     // 6. CloudTrail (multi-region, file validation, CMK encrypted, own bucket)
     // -----------------------------------------------------------------------
+    // CloudTrail requires explicit KMS key policy access; CDK's Trail does not
+    // add this automatically when encryptionKey is set.
+    cmk.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowCloudTrail',
+        principals: [new iam.ServicePrincipal('cloudtrail.amazonaws.com')],
+        actions: ['kms:GenerateDataKey*', 'kms:DescribeKey'],
+        resources: ['*'],
+      }),
+    );
+
     const trailBucket = new s3.Bucket(this, 'AuditTrailBucket', {
       bucketName: `${prefix}-cloudtrail-${account}`,
       encryption: s3.BucketEncryption.KMS,
