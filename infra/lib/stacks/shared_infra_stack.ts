@@ -460,7 +460,7 @@ export class SharedInfraStack extends cdk.Stack {
     });
 
     // -----------------------------------------------------------------------
-    // 12. SSM Parameter Store: export every ARN/ID (14 parameters)
+    // 12. SSM Parameter Store: export every ARN/ID (15 parameters)
     // -----------------------------------------------------------------------
     const base = `/au-jibun-bank/${env}`;
     const param = (scopeId: string, name: string, value: string): ssm.StringParameter =>
@@ -495,9 +495,16 @@ export class SharedInfraStack extends cdk.Stack {
     // Secrets (1)
     param('PCrmApiKeyArn', `${base}/secrets/crm-api-key-arn`, crmApiKey.secretArn);
 
-    // Connect (2)
+    // Connect (3)
     param('PConnectInstanceArn', `${base}/connect/instance-arn`, connectInstanceArn);
     param('PConnectInstanceId', `${base}/connect/instance-id`, connectInstanceId);
+    // Placeholder: update to the real Connect escalation queue ARN once the queue
+    // is provisioned via the Connect admin console or a dedicated stack.
+    param(
+      'PConnectEscalationQueueArn',
+      `${base}/connect/escalation-queue-arn`,
+      `arn:aws:connect:${this.region}:${account}:instance/placeholder/queue/placeholder`,
+    );
 
     // Lex (2)
     param('PLexBotId', `${base}/lex/bot-id`, lexBot.attrId);
