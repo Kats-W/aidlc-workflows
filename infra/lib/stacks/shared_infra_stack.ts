@@ -354,7 +354,8 @@ export class SharedInfraStack extends cdk.Stack {
     // 9. Shared Lambda execution role (VPC access) + permission boundary
     // -----------------------------------------------------------------------
     const lambdaRole = new iam.Role(this, 'SharedLambdaRole', {
-      roleName: `${prefix}-shared-lambda-role`,
+      // No explicit roleName: CloudFormation generates one to avoid
+      // AlreadyExists conflicts when redeploying after a failed rollback.
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       description: 'Shared Lambda execution role for au Jibun Bank AI Agent',
       permissionsBoundary: permissionBoundary,
@@ -395,7 +396,7 @@ export class SharedInfraStack extends cdk.Stack {
     // 11. Amazon Lex v2 bot shell (ja-JP) (L1)
     // -----------------------------------------------------------------------
     const lexServiceRole = new iam.Role(this, 'LexServiceRole', {
-      roleName: `${prefix}-lex-service-role`,
+      // No explicit roleName: same AlreadyExists-prevention pattern as lambdaRole.
       assumedBy: new iam.ServicePrincipal('lexv2.amazonaws.com'),
       description: 'Service role for the au Jibun Bank Lex v2 bot',
     });
