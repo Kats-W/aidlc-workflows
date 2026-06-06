@@ -13,8 +13,6 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 export interface ConversationStackProps extends cdk.StackProps {
   /** Deployment environment name: dev | staging | prod. */
   readonly envName: string;
-  /** Optional ARN of the human escalation queue (US-1.3). */
-  readonly escalationQueueArn?: string;
 }
 
 /**
@@ -52,6 +50,7 @@ export class ConversationStack extends cdk.Stack {
     const customerHistoryTableName = p(`${base}/dynamodb/customer-history-table-name`);
     const cmkArn = p(`${base}/kms/cmk-arn`);
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
+    const escalationQueueArn = p(`${base}/connect/escalation-queue-arn`);
 
     const cmk = kms.Key.fromKeyArn(this, 'SharedCmk', cmkArn);
     const permissionBoundary = iam.ManagedPolicy.fromManagedPolicyArn(
@@ -182,7 +181,7 @@ export class ConversationStack extends cdk.Stack {
       role: escalationRole,
       environment: {
         ...commonEnv,
-        ESCALATION_QUEUE_ARN: props.escalationQueueArn ?? '',
+        ESCALATION_QUEUE_ARN: escalationQueueArn,
       },
       logRetention: logs.RetentionDays.THREE_MONTHS,
     });
@@ -213,7 +212,37 @@ export class ConversationStack extends cdk.Stack {
     cmk.grantEncryptDecrypt(csatRole);
 
     // -----------------------------------------------------------------------
-    // 7. CloudWatch error alarms.
+    // 7. Amazon Connect invoke permissions.
+    //
+    // Connect invokes these Lambdas from contact flows; each needs a resource
+    // policy allowing connect.amazonaws.com to call lambda:InvokeFunction.
+    // -----------------------------------------------------------------------
+    const connectPrincipal = new iam.ServicePrincipal('connect.amazonaws.com');
+    for (const [fn, sid] of [
+      [ragHandler, 'AllowConnectInvoke'],
+      [escalation, 'AllowConnectInvoke'],
+      [personalizer, 'AllowConnectInvoke'],
+      [csatHandler, 'AllowConnectInvoke'],
+    ] as [lambda.Function, string][]) {
+      fn.addPermission(sid, {
+        principal: connectPrincipal,
+        action: 'lambda:InvokeFunction',
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // 8. SSM: publish Lambda ARNs for contact flow wiring in OmnichannelStack.
+    // -----------------------------------------------------------------------
+    const ssmParam = (id: string, name: string, value: string): ssm.StringParameter =>
+      new ssm.StringParameter(this, id, { parameterName: name, stringValue: value });
+
+    ssmParam('PRagHandlerArn', `${base}/lambda/rag-handler-arn`, ragHandler.functionArn);
+    ssmParam('PEscalationArn', `${base}/lambda/escalation-arn`, escalation.functionArn);
+    ssmParam('PPersonalizerArn', `${base}/lambda/personalizer-arn`, personalizer.functionArn);
+    ssmParam('PCsatHandlerArn', `${base}/lambda/csat-handler-arn`, csatHandler.functionArn);
+
+    // -----------------------------------------------------------------------
+    // 9. CloudWatch error alarms.
     // -----------------------------------------------------------------------
     new cloudwatch.Alarm(this, 'RagHandlerErrorAlarm', {
       alarmName: `${prefix}-rag-handler-errors`,
