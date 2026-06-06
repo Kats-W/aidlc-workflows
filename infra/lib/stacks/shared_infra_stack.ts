@@ -377,20 +377,36 @@ export class SharedInfraStack extends cdk.Stack {
     // -----------------------------------------------------------------------
     // 10. Amazon Connect instance (L1)
     // -----------------------------------------------------------------------
-    const connectInstance = new connect.CfnInstance(this, 'ConnectInstance', {
-      identityManagementType: 'CONNECT_MANAGED',
-      // Alias uses prefix only (no "-connect" suffix) to distinguish from any
-      // previous alias that may still be in cooldown after rollback-deletion.
-      instanceAlias: prefix,
-      attributes: {
-        inboundCalls: true,
-        outboundCalls: false,
-        contactflowLogs: true,
-      },
-    });
-    // RETAIN so rollbacks don't delete the instance — alias has a multi-day
-    // reuse cooldown after deletion, which would block the next deployment.
-    connectInstance.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+    // CI injects 'connectInstanceId'/'connectInstanceArn' context when the
+    // instance already exists (retained after a rollback). This prevents the
+    // AlreadyExists → cascade-cancel → ROLLBACK_COMPLETE loop that occurs on
+    // every fresh CREATE when the instance alias is still occupied.
+    const existingConnectId: string | undefined = this.node.tryGetContext('connectInstanceId');
+    const existingConnectArn: string | undefined = this.node.tryGetContext('connectInstanceArn');
+
+    let connectInstanceId: string;
+    let connectInstanceArn: string;
+
+    if (existingConnectId && existingConnectArn) {
+      // Reuse the existing instance; no CF resource created (avoids AlreadyExists).
+      connectInstanceId = existingConnectId;
+      connectInstanceArn = existingConnectArn;
+    } else {
+      const connectInstance = new connect.CfnInstance(this, 'ConnectInstance', {
+        identityManagementType: 'CONNECT_MANAGED',
+        instanceAlias: prefix,
+        attributes: {
+          inboundCalls: true,
+          outboundCalls: false,
+          contactflowLogs: true,
+        },
+      });
+      // RETAIN so rollbacks don't delete the instance — alias has a multi-day
+      // reuse cooldown after deletion, which would block the next deployment.
+      connectInstance.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+      connectInstanceId = connectInstance.attrId;
+      connectInstanceArn = connectInstance.attrArn;
+    }
 
     // -----------------------------------------------------------------------
     // 11. Amazon Lex v2 bot shell (ja-JP) (L1)
@@ -469,8 +485,8 @@ export class SharedInfraStack extends cdk.Stack {
     param('PCrmApiKeyArn', `${base}/secrets/crm-api-key-arn`, crmApiKey.secretArn);
 
     // Connect (2)
-    param('PConnectInstanceArn', `${base}/connect/instance-arn`, connectInstance.attrArn);
-    param('PConnectInstanceId', `${base}/connect/instance-id`, connectInstance.attrId);
+    param('PConnectInstanceArn', `${base}/connect/instance-arn`, connectInstanceArn);
+    param('PConnectInstanceId', `${base}/connect/instance-id`, connectInstanceId);
 
     // Lex (2)
     param('PLexBotId', `${base}/lex/bot-id`, lexBot.attrId);
