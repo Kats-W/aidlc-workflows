@@ -78,8 +78,20 @@ jobs:
           aws-region: ap-northeast-1
       - run: npm ci
       - run: npx cdk bootstrap --context env=dev
+      - name: Resolve existing Connect instance
+        run: |
+          INSTANCES=$(aws connect list-instances --max-results 100 --output json 2>/dev/null \
+            || echo '{"InstanceSummaryList":[]}')
+          INSTANCE_ID=$(echo "$INSTANCES" | jq -r '.InstanceSummaryList[] | select(.InstanceAlias == "au-jibun-bank-dev") | .Id // empty')
+          INSTANCE_ARN=$(echo "$INSTANCES" | jq -r '.InstanceSummaryList[] | select(.InstanceAlias == "au-jibun-bank-dev") | .Arn // empty')
+          if [ -n "$INSTANCE_ID" ]; then
+            echo "CONNECT_CTX=--context connectInstanceId=$INSTANCE_ID --context connectInstanceArn=$INSTANCE_ARN" >> "$GITHUB_ENV"
+            echo "Found existing Connect instance: $INSTANCE_ID"
+          else
+            echo "CONNECT_CTX=" >> "$GITHUB_ENV"
+          fi
       - name: Deploy SharedInfra
-        run: npx cdk deploy AuJibunBank-dev-SharedInfra --context env=dev --require-approval never
+        run: npx cdk deploy AuJibunBank-dev-SharedInfra --context env=dev --require-approval never $CONNECT_CTX
       - name: Deploy KnowledgePipeline
         run: npx cdk deploy AuJibunBank-dev-KnowledgePipeline --context env=dev --require-approval never
       - name: Deploy Conversation
