@@ -378,14 +378,18 @@ export class SharedInfraStack extends cdk.Stack {
     // -----------------------------------------------------------------------
     const connectInstance = new connect.CfnInstance(this, 'ConnectInstance', {
       identityManagementType: 'CONNECT_MANAGED',
-      // No explicit instanceAlias to avoid reuse-cooldown conflicts after rollback.
-      // The instance ARN/ID are exported via SSM for downstream stacks.
+      // Alias uses prefix only (no "-connect" suffix) to distinguish from any
+      // previous alias that may still be in cooldown after rollback-deletion.
+      instanceAlias: prefix,
       attributes: {
         inboundCalls: true,
         outboundCalls: false,
         contactflowLogs: true,
       },
     });
+    // RETAIN so rollbacks don't delete the instance — alias has a multi-day
+    // reuse cooldown after deletion, which would block the next deployment.
+    connectInstance.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
 
     // -----------------------------------------------------------------------
     // 11. Amazon Lex v2 bot shell (ja-JP) (L1)
