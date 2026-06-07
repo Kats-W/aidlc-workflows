@@ -476,20 +476,20 @@ export class SharedInfraStack extends cdk.Stack {
       }),
     );
 
+    // Lex v2 ja-JP is available in ap-northeast-1. The bot acts as a pure ASR
+    // (automatic speech recognition) device: FallbackIntent catches every utterance
+    // and the full transcript is passed to the RAG Lambda via $.Lex.InputTranscript.
     const lexBot = new lex.CfnBot(this, 'LexBot', {
       name: `${prefix}-bot`,
       roleArn: lexServiceRole.roleArn,
       dataPrivacy: { ChildDirected: false },
       idleSessionTtlInSeconds: 300,
+      autoBuildBotLocales: true,
       botLocales: [
         {
-          // TODO(prod): Lex v2 ja-JP is only available in us-east-1 (not ap-northeast-1).
-          // For production, either deploy the Lex bot to us-east-1 or await regional expansion.
-          // en_US is used here as a shell placeholder to pass CDK deploy in ap-northeast-1.
-          localeId: 'en_US',
+          localeId: 'ja_JP',
           nluConfidenceThreshold: 0.4,
-          // Intents are defined in U-03; U-01 only provisions the shell with a
-          // minimal fallback intent so the locale is valid.
+          voiceSettings: { voiceId: 'Kazuha', engine: 'neural' },
           intents: [
             {
               name: 'FallbackIntent',
@@ -498,6 +498,36 @@ export class SharedInfraStack extends cdk.Stack {
           ],
         },
       ],
+    });
+
+    const lexBotVersion = new lex.CfnBotVersion(this, 'LexBotVersion', {
+      botId: lexBot.attrId,
+      botVersionLocaleSpecification: [
+        {
+          localeId: 'ja_JP',
+          botVersionLocaleDetails: { sourceBotVersion: 'DRAFT' },
+        },
+      ],
+    });
+
+    const lexBotAlias = new lex.CfnBotAlias(this, 'LexBotAlias', {
+      botId: lexBot.attrId,
+      botAliasName: 'live',
+      botVersion: lexBotVersion.attrBotVersion,
+      botAliasLocaleSettings: [
+        {
+          localeId: 'ja_JP',
+          botAliasLocaleSetting: { enabled: true },
+        },
+      ],
+    });
+
+    // Associate the Lex bot alias with the Connect instance so contact flows
+    // can reference it in GetParticipantInput blocks.
+    new connect.CfnIntegrationAssociation(this, 'ConnectLexIntegration', {
+      instanceId: connectInstanceArn,
+      integrationType: 'LEX_BOT',
+      integrationArn: lexBotAlias.attrArn,
     });
 
     // -----------------------------------------------------------------------
@@ -543,7 +573,7 @@ export class SharedInfraStack extends cdk.Stack {
 
     // Lex (2)
     param('PLexBotId', `${base}/lex/bot-id`, lexBot.attrId);
-    param('PLexBotAliasArn', `${base}/lex/bot-alias-arn`, lexBot.attrArn);
+    param('PLexBotAliasArn', `${base}/lex/bot-alias-arn`, lexBotAlias.attrArn);
 
     // IAM (1)
     param(

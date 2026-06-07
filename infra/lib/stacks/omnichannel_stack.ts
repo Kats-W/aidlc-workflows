@@ -47,8 +47,6 @@ export class OmnichannelStack extends cdk.Stack {
     const customerHistoryTableName = p(`${base}/dynamodb/customer-history-table-name`);
     const cmkArn = p(`${base}/kms/cmk-arn`);
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
-    // Escalation queue ARN for US-4.3 (TransferToQueue). Provisioned by Connect
-    // admin and published to SSM; consumed here for the contact-flow wiring.
     const escalationQueueArn = p(`${base}/connect/escalation-queue-arn`);
     const connectInstanceArn = p(`${base}/connect/instance-arn`);
 
@@ -146,20 +144,32 @@ export class OmnichannelStack extends cdk.Stack {
       description: 'Escalation queue ARN resolved from SSM for the contact flow',
     });
 
+    const lexBotAliasArnForFlow = new cdk.CfnParameter(this, 'LexBotAliasArnForFlow', {
+      type: 'AWS::SSM::Parameter::Value<String>',
+      default: `${base}/lex/bot-alias-arn`,
+      description: 'Lex bot alias ARN resolved from SSM for the contact flow GetParticipantInput block',
+    });
+
     const ragHandlerArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-rag-handler`;
     const escalationLambdaArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-escalation`;
 
+    // Flow: SetVoice(009) → Welcome(001) → GetParticipantInput/Lex(010) → RAG(002) →
+    //   hit=true  → PlayAnswer(004) → GetParticipantInput(010) [conversation loop]
+    //   hit=false → Escalation(005) → SetQueue(006) → Transfer(007) → Disconnect(008)
+    //   errors    → Escalation(005) or Disconnect(008)
     const contactFlowTemplate = JSON.stringify({
       Version: '2019-10-30',
-      StartAction: 'aab00001-0000-0000-0000-000000000001',
+      StartAction: 'aab00001-0000-0000-0000-000000000009',
       Metadata: {
         entryPointPosition: { x: 14.4, y: 14.4 },
         Annotations: [],
         ActionMetadata: {
-          'aab00001-0000-0000-0000-000000000001': { position: { x: 75, y: 20 } },
-          'aab00001-0000-0000-0000-000000000002': { position: { x: 300, y: 20 } },
-          'aab00001-0000-0000-0000-000000000003': { position: { x: 530, y: 20 } },
-          'aab00001-0000-0000-0000-000000000004': { position: { x: 760, y: 20 } },
+          'aab00001-0000-0000-0000-000000000009': { position: { x: 75, y: 20 } },
+          'aab00001-0000-0000-0000-000000000001': { position: { x: 300, y: 20 } },
+          'aab00001-0000-0000-0000-000000000010': { position: { x: 530, y: 20 } },
+          'aab00001-0000-0000-0000-000000000002': { position: { x: 760, y: 20 } },
+          'aab00001-0000-0000-0000-000000000003': { position: { x: 990, y: 20 } },
+          'aab00001-0000-0000-0000-000000000004': { position: { x: 1220, y: 20 } },
           'aab00001-0000-0000-0000-000000000005': { position: { x: 760, y: 200 } },
           'aab00001-0000-0000-0000-000000000006': { position: { x: 990, y: 200 } },
           'aab00001-0000-0000-0000-000000000007': { position: { x: 1220, y: 200 } },
@@ -168,6 +178,16 @@ export class OmnichannelStack extends cdk.Stack {
       },
       Actions: [
         {
+          // 009: Set Japanese Polly voice before any TTS is played.
+          Identifier: 'aab00001-0000-0000-0000-000000000009',
+          Type: 'UpdateContactTextToSpeechVoice',
+          Parameters: { VoiceId: 'Kazuha' },
+          Transitions: {
+            NextAction: 'aab00001-0000-0000-0000-000000000001',
+          },
+        },
+        {
+          // 001: Welcome message (plays once at call start).
           Identifier: 'aab00001-0000-0000-0000-000000000001',
           Type: 'MessageParticipant',
           Parameters: {
@@ -175,15 +195,38 @@ export class OmnichannelStack extends cdk.Stack {
             Text: 'auじぶん銀行AIアシスタントです。ご質問をどうぞ。',
           },
           Transitions: {
-            NextAction: 'aab00001-0000-0000-0000-000000000002',
+            NextAction: 'aab00001-0000-0000-0000-000000000010',
           },
         },
         {
+          // 010: Collect customer voice via Lex ASR. $.Lex.InputTranscript carries
+          // the full utterance regardless of intent, passed to RAG as userInput.
+          Identifier: 'aab00001-0000-0000-0000-000000000010',
+          Type: 'GetParticipantInput',
+          Parameters: {
+            Text: 'ご質問をどうぞ。',
+            LexV2Bot: { AliasArn: '${LexBotAliasArn}' },
+            LexSessionAttributes: {},
+          },
+          Transitions: {
+            NextAction: 'aab00001-0000-0000-0000-000000000002',
+            Conditions: [],
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'InputTimeLimitExceeded' },
+              { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'NoMatchingError' },
+            ],
+          },
+        },
+        {
+          // 002: RAG Lambda — receives the Lex transcript as userInput.
           Identifier: 'aab00001-0000-0000-0000-000000000002',
           Type: 'InvokeLambdaFunction',
           Parameters: {
             LambdaFunctionARN: ragHandlerArn,
             InvocationTimeLimitSeconds: '8',
+            LambdaInvocationAttributes: {
+              userInput: '$.Lex.InputTranscript',
+            },
           },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000003',
@@ -194,6 +237,7 @@ export class OmnichannelStack extends cdk.Stack {
           },
         },
         {
+          // 003: Check RAG hit flag.
           Identifier: 'aab00001-0000-0000-0000-000000000003',
           Type: 'Compare',
           Parameters: {
@@ -213,6 +257,7 @@ export class OmnichannelStack extends cdk.Stack {
           },
         },
         {
+          // 004: Read RAG answer aloud, then loop back to collect next question.
           Identifier: 'aab00001-0000-0000-0000-000000000004',
           Type: 'MessageParticipant',
           Parameters: {
@@ -220,7 +265,7 @@ export class OmnichannelStack extends cdk.Stack {
             Text: '$.External.response_text',
           },
           Transitions: {
-            NextAction: 'aab00001-0000-0000-0000-000000000002',
+            NextAction: 'aab00001-0000-0000-0000-000000000010',
           },
         },
         {
@@ -276,6 +321,7 @@ export class OmnichannelStack extends cdk.Stack {
 
     const contactFlowContent = cdk.Fn.sub(contactFlowTemplate, {
       EscalationQueueArn: escalationQueueArnForFlow.valueAsString,
+      LexBotAliasArn: lexBotAliasArnForFlow.valueAsString,
     });
 
     const contactFlow = new connect.CfnContactFlow(this, 'AiContactFlow', {

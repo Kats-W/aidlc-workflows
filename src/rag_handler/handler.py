@@ -142,5 +142,24 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """Synchronous Lambda entry point (wraps the async :func:`handler`)."""
+    """Synchronous Lambda entry point (wraps the async :func:`handler`).
+
+    Normalises the Amazon Connect contact-flow event envelope so the inner
+    ``handler`` always receives a flat dict with ``userInput``, ``customerId``,
+    ``channel``, and ``contactId`` at the top level.  Direct test invocations
+    (which already use the flat format) pass through unchanged.
+    """
+    if "Details" in event:
+        # Connect wraps everything inside Details.{ContactData,Parameters}.
+        details: dict[str, Any] = event.get("Details", {})
+        params: dict[str, Any] = details.get("Parameters", {})
+        contact_data: dict[str, Any] = details.get("ContactData", {})
+        attrs: dict[str, Any] = contact_data.get("Attributes", {})
+        normalized: dict[str, Any] = {
+            "userInput": params.get("userInput", ""),
+            "customerId": params.get("customerId") or attrs.get("customerId", ""),
+            "channel": contact_data.get("Channel", "VOICE").lower(),
+            "contactId": contact_data.get("ContactId", ""),
+        }
+        return asyncio.run(handler(normalized, context))
     return asyncio.run(handler(event, context))
