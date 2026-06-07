@@ -191,6 +191,10 @@ export class OmnichannelStack extends cdk.Stack {
           Parameters: { TextToSpeechVoice: 'Kazuha', TextToSpeechEngine: 'neural' },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000001',
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000001', ErrorType: 'NoMatchingError' },
+            ],
+            Conditions: [],
           },
         },
         {
@@ -203,6 +207,10 @@ export class OmnichannelStack extends cdk.Stack {
           },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000010',
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000010', ErrorType: 'NoMatchingError' },
+            ],
+            Conditions: [],
           },
         },
         {
@@ -274,6 +282,10 @@ export class OmnichannelStack extends cdk.Stack {
           },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000010',
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000010', ErrorType: 'NoMatchingError' },
+            ],
+            Conditions: [],
           },
         },
         {
