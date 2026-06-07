@@ -7,28 +7,34 @@
 
 ### 情報源の優先順位
 
+<!-- markdownlint-disable MD060 -->
 | 優先度 | 情報源 | ツール | 備考 |
 |--------|--------|--------|------|
 | 1 | AWS 公式ドキュメント | `aws-docs` MCP (`search_documentation`, `read_documentation`) | 最優先。スキーマ・API リファレンスはここで確定させる |
 | 2 | AWS 公式ブログ | `WebSearch` (allowed: `aws.amazon.com`) | 実装パターン・ベストプラクティス |
 | 3 | AWS re:Post / GitHub awslabs | `WebSearch` / `WebFetch` | 既知の不具合・制約の確認 |
 | 4 | 技術ブログ・Qiita | `WebSearch` | 公式情報で解決できない場合のみ。信頼性低に注意 |
+<!-- markdownlint-enable MD060 -->
 
 ### 必須調査パターン
 
 #### Amazon Connect コンタクトフロー JSON
+
 - `InvalidContactFlowException` が発生する前に必ずスキーマを調査する
 - 各アクションタイプ（`GetParticipantInput`, `InvokeLambdaFunction` 等）の有効パラメータを確認
 - 調査コマンド例:
-  ```
+
+  ```text
   search_documentation("Amazon Connect contact flow GetParticipantInput parameters")
   search_documentation("Amazon Connect contact flow JSON schema InvokeLambdaFunction")
   ```
 
 #### AWS CDK コンストラクト
+
 - L2 コンストラクトが存在するか確認してから L1 (Cfn) を使う判断をする
 - 調査コマンド例:
-  ```
+
+  ```text
   search_documentation("AWS CDK CfnContactFlow content JSON schema")
   ```
 
