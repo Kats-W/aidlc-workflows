@@ -154,6 +154,7 @@ export class OmnichannelStack extends cdk.Stack {
       StartAction: 'aab00001-0000-0000-0000-000000000001',
       Metadata: {
         entryPointPosition: { x: 14.4, y: 14.4 },
+        Annotations: [],
         ActionMetadata: {
           'aab00001-0000-0000-0000-000000000001': { position: { x: 75, y: 20 } },
           'aab00001-0000-0000-0000-000000000002': { position: { x: 300, y: 20 } },
@@ -189,6 +190,7 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'NoMatchingError' },
             ],
+            Conditions: [],
           },
         },
         {
@@ -233,6 +235,7 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
             ],
+            Conditions: [],
           },
         },
         {
@@ -246,6 +249,7 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
             ],
+            Conditions: [],
           },
         },
         {
@@ -256,7 +260,9 @@ export class OmnichannelStack extends cdk.Stack {
             NextAction: 'aab00001-0000-0000-0000-000000000008',
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
+              { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'QueueAtCapacity' },
             ],
+            Conditions: [],
           },
         },
         {
