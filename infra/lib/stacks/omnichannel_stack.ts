@@ -156,7 +156,7 @@ export class OmnichannelStack extends cdk.Stack {
           },
           Transitions: {
             NextAction: 'InvokeRag',
-            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Errors: [],
             Conditions: [],
           },
         },
@@ -169,7 +169,7 @@ export class OmnichannelStack extends cdk.Stack {
           },
           Transitions: {
             NextAction: 'CheckRagHit',
-            Errors: [{ NextAction: 'InvokeEscalation', ErrorType: 'NoMatchingCondition' }],
+            Errors: [{ NextAction: 'InvokeEscalation', ErrorType: 'NoMatchingError' }],
             Conditions: [],
           },
         },
@@ -197,7 +197,7 @@ export class OmnichannelStack extends cdk.Stack {
           },
           Transitions: {
             NextAction: 'InvokeRag',
-            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Errors: [],
             Conditions: [],
           },
         },
@@ -210,7 +210,7 @@ export class OmnichannelStack extends cdk.Stack {
           },
           Transitions: {
             NextAction: 'SetEscalationQueue',
-            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingError' }],
             Conditions: [],
           },
         },
@@ -222,7 +222,7 @@ export class OmnichannelStack extends cdk.Stack {
           },
           Transitions: {
             NextAction: 'TransferToQueue',
-            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingError' }],
             Conditions: [],
           },
         },
@@ -232,7 +232,7 @@ export class OmnichannelStack extends cdk.Stack {
           Parameters: {},
           Transitions: {
             NextAction: 'Disconnect',
-            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingError' }],
             Conditions: [],
           },
         },
