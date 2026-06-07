@@ -115,19 +115,31 @@ export class OmnichannelStack extends cdk.Stack {
     // -----------------------------------------------------------------------
     // 4. Main AI contact flow.
     //
-    // Lambda ARNs are deterministic from the naming prefix, so they can be
-    // embedded directly in the JSON content string without SSM dynamic refs
-    // (which CloudFormation resolves at resource level only, not inside strings).
+    // Lambda ARNs are deterministic from the naming prefix and embedded
+    // directly in the JSON. The escalation queue ARN is resolved at deploy
+    // time via a CfnParameter of type AWS::SSM::Parameter::Value<String>
+    // (SSM dynamic refs don't work inside JSON strings, but this type is
+    // resolved by CloudFormation before the CfnContactFlow resource is
+    // created). Fn::Sub injects the resolved value.
     //
     // Flow: Welcome → InvokeRag → CheckHit
     //   hit=true  → PlayAnswer → InvokeRag (conversation loop)
     //   hit=false → InvokeEscalation → SetEscalationQueue → Transfer
     //   errors    → Disconnect
     // -----------------------------------------------------------------------
+    const escalationQueueArnForFlow = new cdk.CfnParameter(this, 'EscalationQueueArnForFlow', {
+      type: 'AWS::SSM::Parameter::Value<String>',
+      default: `${base}/connect/escalation-queue-arn`,
+      description: 'Escalation queue ARN resolved from SSM for the contact flow',
+    });
+
     const ragHandlerArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-rag-handler`;
     const escalationLambdaArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-escalation`;
 
-    const contactFlowContent = JSON.stringify({
+    // Build template with ${EscalationQueueArn} placeholder; Fn::Sub replaces
+    // it with the CfnParameter value (the real queue ARN) at deploy time.
+    // CheckAttribute uses the bare attribute name "hit" (not "$.External.hit").
+    const contactFlowTemplate = JSON.stringify({
       Version: '2019-10-30',
       StartAction: 'PlayWelcome',
       Metadata: {
@@ -154,14 +166,10 @@ export class OmnichannelStack extends cdk.Stack {
           Parameters: {
             LambdaFunctionARN: ragHandlerArn,
             InvocationTimeLimitSeconds: '8',
-            LambdaInvocationAttributes: {},
           },
           Transitions: {
             NextAction: 'CheckRagHit',
-            Errors: [
-              { NextAction: 'InvokeEscalation', ErrorType: 'NoMatchingCondition' },
-              { NextAction: 'InvokeEscalation', ErrorType: 'InvalidLambdaResponse' },
-            ],
+            Errors: [{ NextAction: 'InvokeEscalation', ErrorType: 'NoMatchingCondition' }],
             Conditions: [],
           },
         },
@@ -169,7 +177,7 @@ export class OmnichannelStack extends cdk.Stack {
           Identifier: 'CheckRagHit',
           Type: 'CheckAttribute',
           Parameters: {
-            Attribute: '$.External.hit',
+            Attribute: 'hit',
             AttributeType: 'External',
           },
           Transitions: {
@@ -199,7 +207,6 @@ export class OmnichannelStack extends cdk.Stack {
           Parameters: {
             LambdaFunctionARN: escalationLambdaArn,
             InvocationTimeLimitSeconds: '8',
-            LambdaInvocationAttributes: {},
           },
           Transitions: {
             NextAction: 'SetEscalationQueue',
@@ -211,7 +218,7 @@ export class OmnichannelStack extends cdk.Stack {
           Identifier: 'SetEscalationQueue',
           Type: 'UpdateContactTargetQueue',
           Parameters: {
-            QueueId: '$.External.escalation_queue_arn',
+            QueueId: '${EscalationQueueArn}',
           },
           Transitions: {
             NextAction: 'TransferToQueue',
@@ -236,6 +243,10 @@ export class OmnichannelStack extends cdk.Stack {
           Transitions: {},
         },
       ],
+    });
+
+    const contactFlowContent = cdk.Fn.sub(contactFlowTemplate, {
+      EscalationQueueArn: escalationQueueArnForFlow.valueAsString,
     });
 
     const contactFlow = new connect.CfnContactFlow(this, 'AiContactFlow', {
