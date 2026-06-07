@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as kms from 'aws-cdk-lib/aws-kms';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -476,20 +477,20 @@ export class SharedInfraStack extends cdk.Stack {
       }),
     );
 
+    // Lex v2 ja-JP is available in ap-northeast-1. The bot acts as a pure ASR
+    // (automatic speech recognition) device: FallbackIntent catches every utterance
+    // and the full transcript is passed to the RAG Lambda via $.Lex.InputTranscript.
     const lexBot = new lex.CfnBot(this, 'LexBot', {
       name: `${prefix}-bot`,
       roleArn: lexServiceRole.roleArn,
       dataPrivacy: { ChildDirected: false },
       idleSessionTtlInSeconds: 300,
+      autoBuildBotLocales: true,
       botLocales: [
         {
-          // TODO(prod): Lex v2 ja-JP is only available in us-east-1 (not ap-northeast-1).
-          // For production, either deploy the Lex bot to us-east-1 or await regional expansion.
-          // en_US is used here as a shell placeholder to pass CDK deploy in ap-northeast-1.
-          localeId: 'en_US',
+          localeId: 'ja_JP',
           nluConfidenceThreshold: 0.4,
-          // Intents are defined in U-03; U-01 only provisions the shell with a
-          // minimal fallback intent so the locale is valid.
+          voiceSettings: { voiceId: 'Kazuha', engine: 'neural' },
           intents: [
             {
               name: 'FallbackIntent',
@@ -500,8 +501,53 @@ export class SharedInfraStack extends cdk.Stack {
       ],
     });
 
+    const lexBotVersion = new lex.CfnBotVersion(this, 'LexBotVersion', {
+      botId: lexBot.attrId,
+      botVersionLocaleSpecification: [
+        {
+          localeId: 'ja_JP',
+          botVersionLocaleDetails: { sourceBotVersion: 'DRAFT' },
+        },
+      ],
+    });
+
+    const lexBotAlias = new lex.CfnBotAlias(this, 'LexBotAlias', {
+      botId: lexBot.attrId,
+      botAliasName: 'live',
+      botVersion: lexBotVersion.attrBotVersion,
+      botAliasLocaleSettings: [
+        {
+          localeId: 'ja_JP',
+          botAliasLocaleSetting: { enabled: true },
+        },
+      ],
+    });
+
+    // Associate the Lex bot alias with the Connect instance so contact flows
+    // can reference it in GetParticipantInput blocks.
+    new connect.CfnIntegrationAssociation(this, 'ConnectLexIntegration', {
+      instanceId: connectInstanceArn,
+      integrationType: 'LEX_BOT',
+      integrationArn: lexBotAlias.attrArn,
+    });
+
     // -----------------------------------------------------------------------
-    // 12. SSM Parameter Store: export every ARN/ID (15 parameters)
+    // 12. Python dependencies Lambda Layer
+    //
+    // Packages are installed into infra/lambda-layer/python/ by the CI
+    // cdk-deploy-dev job before `cdk deploy` runs. The .gitkeep placeholder
+    // keeps the directory tracked so `cdk synth` in the cdk-ci job does not
+    // fail due to a missing asset directory.
+    // -----------------------------------------------------------------------
+    const pythonDepsLayer = new lambda.LayerVersion(this, 'PythonDepsLayer', {
+      layerVersionName: `${prefix}-python-deps`,
+      code: lambda.Code.fromAsset('./lambda-layer'),
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+      description: 'boto3, aioboto3, aws-lambda-powertools, httpx, beautifulsoup4, numpy, msgpack',
+    });
+
+    // -----------------------------------------------------------------------
+    // 13. SSM Parameter Store: export every ARN/ID (16 parameters)
     // -----------------------------------------------------------------------
     const base = `/au-jibun-bank/${env}`;
     const param = (scopeId: string, name: string, value: string): ssm.StringParameter =>
@@ -543,7 +589,7 @@ export class SharedInfraStack extends cdk.Stack {
 
     // Lex (2)
     param('PLexBotId', `${base}/lex/bot-id`, lexBot.attrId);
-    param('PLexBotAliasArn', `${base}/lex/bot-alias-arn`, lexBot.attrArn);
+    param('PLexBotAliasArn', `${base}/lex/bot-alias-arn`, lexBotAlias.attrArn);
 
     // IAM (1)
     param(
@@ -551,6 +597,9 @@ export class SharedInfraStack extends cdk.Stack {
       `${base}/iam/lambda-permission-boundary-arn`,
       permissionBoundary.managedPolicyArn,
     );
+
+    // Lambda Layer (1)
+    param('PPythonDepsLayerArn', `${base}/lambda/python-deps-layer-arn`, pythonDepsLayer.layerVersionArn);
 
     // -----------------------------------------------------------------------
     // Tagging: every resource in the stack gets an Environment tag.

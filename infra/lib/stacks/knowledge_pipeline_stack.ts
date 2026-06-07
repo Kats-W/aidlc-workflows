@@ -52,12 +52,18 @@ export class KnowledgePipelineStack extends cdk.Stack {
     const crawlBucketName = p(`${base}/s3/crawl-content-bucket-name`);
     const cmkArn = p(`${base}/kms/cmk-arn`);
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
+    const pythonDepsLayerArn = p(`${base}/lambda/python-deps-layer-arn`);
 
     const cmk = kms.Key.fromKeyArn(this, 'SharedCmk', cmkArn);
     const permissionBoundary = iam.ManagedPolicy.fromManagedPolicyArn(
       this,
       'LambdaPermBoundary',
       permBoundaryArn,
+    );
+    const pythonDepsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      'PythonDepsLayer',
+      pythonDepsLayerArn,
     );
 
     // ARNs reconstructed from names (SSM exports names, not ARNs, for tables/bucket).
@@ -86,9 +92,9 @@ export class KnowledgePipelineStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.vector_store.handler.lambda_handler',
       code: lambda.Code.fromAsset('..', {
-        // In CI the deployment package is built by `uv`; placeholder bundling.
         exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
       }),
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.minutes(5),
       memorySize: 512,
       role: embedderRole,
@@ -108,6 +114,7 @@ export class KnowledgePipelineStack extends cdk.Stack {
       code: lambda.Code.fromAsset('..', {
         exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
       }),
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.minutes(15),
       memorySize: 1024,
       role: crawlerRole,

@@ -55,12 +55,18 @@ export class ProfileStack extends cdk.Stack {
     const crmApiKeyArn = p(`${base}/secrets/crm-api-key-arn`);
     const cmkArn = p(`${base}/kms/cmk-arn`);
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
+    const pythonDepsLayerArn = p(`${base}/lambda/python-deps-layer-arn`);
 
     const cmk = kms.Key.fromKeyArn(this, 'SharedCmk', cmkArn);
     const permissionBoundary = iam.ManagedPolicy.fromManagedPolicyArn(
       this,
       'LambdaPermBoundary',
       permBoundaryArn,
+    );
+    const pythonDepsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      'PythonDepsLayer',
+      pythonDepsLayerArn,
     );
 
     // ARN reconstructed from the exported table name (SSM exports the name).
@@ -103,6 +109,7 @@ export class ProfileStack extends cdk.Stack {
       code: lambda.Code.fromAsset('..', {
         exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
       }),
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
       role: profileRole,
@@ -141,6 +148,7 @@ export class ProfileStack extends cdk.Stack {
       code: lambda.Code.fromAsset('..', {
         exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
       }),
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
       role: crmWriterRole,

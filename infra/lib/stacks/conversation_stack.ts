@@ -51,12 +51,18 @@ export class ConversationStack extends cdk.Stack {
     const cmkArn = p(`${base}/kms/cmk-arn`);
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
     const escalationQueueArn = p(`${base}/connect/escalation-queue-arn`);
+    const pythonDepsLayerArn = p(`${base}/lambda/python-deps-layer-arn`);
 
     const cmk = kms.Key.fromKeyArn(this, 'SharedCmk', cmkArn);
     const permissionBoundary = iam.ManagedPolicy.fromManagedPolicyArn(
       this,
       'LambdaPermBoundary',
       permBoundaryArn,
+    );
+    const pythonDepsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      'PythonDepsLayer',
+      pythonDepsLayerArn,
     );
 
     // ARNs reconstructed from names (SSM exports names, not ARNs, for tables).
@@ -87,6 +93,7 @@ export class ConversationStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.rag_handler.handler.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       role: ragRole,
@@ -147,6 +154,7 @@ export class ConversationStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.rag_handler.personalizer.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
       role: personalizerRole,
@@ -176,6 +184,7 @@ export class ConversationStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.rag_handler.escalation.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
       role: escalationRole,
@@ -195,6 +204,7 @@ export class ConversationStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.session_manager.csat_handler.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
       role: csatRole,

@@ -77,6 +77,16 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-1
       - run: npm ci
+      - name: Build Python deps Lambda layer
+        run: |
+          pip install \
+            boto3 aioboto3 "aws-lambda-powertools>=2.0" httpx \
+            beautifulsoup4 numpy msgpack \
+            -t ./lambda-layer/python \
+            --platform manylinux2014_x86_64 \
+            --python-version 3.12 \
+            --only-binary=:all: \
+            --upgrade
       - run: npx cdk bootstrap --context env=dev
       - name: Resolve existing Connect instance
         run: |
