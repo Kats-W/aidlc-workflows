@@ -194,7 +194,6 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000001', ErrorType: 'NoMatchingError' },
             ],
-            Conditions: [],
           },
         },
         {
@@ -210,7 +209,6 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000010', ErrorType: 'NoMatchingError' },
             ],
-            Conditions: [],
           },
         },
         {
@@ -248,7 +246,6 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'NoMatchingError' },
             ],
-            Conditions: [],
           },
         },
         {
@@ -285,7 +282,6 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000010', ErrorType: 'NoMatchingError' },
             ],
-            Conditions: [],
           },
         },
         {
@@ -300,7 +296,6 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
             ],
-            Conditions: [],
           },
         },
         {
@@ -314,7 +309,6 @@ export class OmnichannelStack extends cdk.Stack {
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
             ],
-            Conditions: [],
           },
         },
         {
@@ -327,7 +321,6 @@ export class OmnichannelStack extends cdk.Stack {
               { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
               { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'QueueAtCapacity' },
             ],
-            Conditions: [],
           },
         },
         {
