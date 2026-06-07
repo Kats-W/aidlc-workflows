@@ -213,7 +213,7 @@ export class OmnichannelStack extends cdk.Stack {
           Parameters: {
             Text: 'ご質問をどうぞ。',
             LexV2Bot: { AliasArn: '${LexBotAliasArn}' },
-            LexSessionAttributes: {},
+            Timeout: '6',
           },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000002',
@@ -265,11 +265,12 @@ export class OmnichannelStack extends cdk.Stack {
         },
         {
           // 004: Read RAG answer aloud, then loop back to collect next question.
+          // Lambda returns {"answer": "...", "hit": true} — reference $.External.answer.
           Identifier: 'aab00001-0000-0000-0000-000000000004',
           Type: 'MessageParticipant',
           Parameters: {
             SkipWhenDTMFBufferEnabled: 'false',
-            Text: '$.External.response_text',
+            Text: '$.External.answer',
           },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000010',
