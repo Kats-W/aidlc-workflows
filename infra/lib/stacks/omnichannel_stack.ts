@@ -188,7 +188,7 @@ export class OmnichannelStack extends cdk.Stack {
           // 009: Set Japanese Polly voice before any TTS is played.
           Identifier: 'aab00001-0000-0000-0000-000000000009',
           Type: 'UpdateContactTextToSpeechVoice',
-          Parameters: { VoiceId: 'Kazuha' },
+          Parameters: { TextToSpeechVoice: 'Kazuha', TextToSpeechEngine: 'neural' },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000001',
           },
