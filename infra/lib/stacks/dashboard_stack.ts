@@ -60,12 +60,18 @@ export class DashboardStack extends cdk.Stack {
     const contactAnalysisTableName = p(`${base}/dynamodb/contact-analysis-table-name`);
     const cmkArn = p(`${base}/kms/cmk-arn`);
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
+    const pythonDepsLayerArn = p(`${base}/lambda/python-deps-layer-arn`);
 
     const cmk = kms.Key.fromKeyArn(this, 'SharedCmk', cmkArn);
     const permissionBoundary = iam.ManagedPolicy.fromManagedPolicyArn(
       this,
       'LambdaPermBoundary',
       permBoundaryArn,
+    );
+    const pythonDepsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      'PythonDepsLayer',
+      pythonDepsLayerArn,
     );
 
     const improvementSuggestionsArn = `arn:aws:dynamodb:${this.region}:${account}:table/${improvementSuggestionsTableName}`;
@@ -120,6 +126,7 @@ export class DashboardStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.dashboard_api.metrics_aggregator.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(60),
       memorySize: 256,
       role: aggregatorRole,
@@ -156,6 +163,7 @@ export class DashboardStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.dashboard_api.handler.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
       role: apiRole,

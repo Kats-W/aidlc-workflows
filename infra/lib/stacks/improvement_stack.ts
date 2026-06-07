@@ -57,12 +57,18 @@ export class ImprovementStack extends cdk.Stack {
     const cmkArn = p(`${base}/kms/cmk-arn`);
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
     const connectInstanceId = p(`${base}/connect/instance-id`);
+    const pythonDepsLayerArn = p(`${base}/lambda/python-deps-layer-arn`);
 
     const cmk = kms.Key.fromKeyArn(this, 'SharedCmk', cmkArn);
     const permissionBoundary = iam.ManagedPolicy.fromManagedPolicyArn(
       this,
       'LambdaPermBoundary',
       permBoundaryArn,
+    );
+    const pythonDepsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      'PythonDepsLayer',
+      pythonDepsLayerArn,
     );
 
     // ARNs reconstructed from names (SSM exports names for tables).
@@ -98,6 +104,7 @@ export class ImprovementStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.improvement_generator.suggestion_generator.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(120),
       memorySize: 256,
       role: suggestionRole,
@@ -137,6 +144,7 @@ export class ImprovementStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.improvement_generator.gap_analyzer.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(120),
       memorySize: 256,
       role: gapRole,
@@ -195,6 +203,7 @@ export class ImprovementStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.improvement_generator.contact_lens_analyzer.lambda_handler',
       code,
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(300),
       memorySize: 512,
       role: contactLensRole,

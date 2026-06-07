@@ -49,12 +49,18 @@ export class OmnichannelStack extends cdk.Stack {
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
     const escalationQueueArn = p(`${base}/connect/escalation-queue-arn`);
     const connectInstanceArn = p(`${base}/connect/instance-arn`);
+    const pythonDepsLayerArn = p(`${base}/lambda/python-deps-layer-arn`);
 
     const cmk = kms.Key.fromKeyArn(this, 'SharedCmk', cmkArn);
     const permissionBoundary = iam.ManagedPolicy.fromManagedPolicyArn(
       this,
       'LambdaPermBoundary',
       permBoundaryArn,
+    );
+    const pythonDepsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      'PythonDepsLayer',
+      pythonDepsLayerArn,
     );
 
     // ARN reconstructed from the exported table name.
@@ -79,6 +85,7 @@ export class OmnichannelStack extends cdk.Stack {
       code: lambda.Code.fromAsset('..', {
         exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
       }),
+      layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
       role: channelSwitchRole,

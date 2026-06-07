@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as kms from 'aws-cdk-lib/aws-kms';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -531,7 +532,22 @@ export class SharedInfraStack extends cdk.Stack {
     });
 
     // -----------------------------------------------------------------------
-    // 12. SSM Parameter Store: export every ARN/ID (15 parameters)
+    // 12. Python dependencies Lambda Layer
+    //
+    // Packages are installed into infra/lambda-layer/python/ by the CI
+    // cdk-deploy-dev job before `cdk deploy` runs. The .gitkeep placeholder
+    // keeps the directory tracked so `cdk synth` in the cdk-ci job does not
+    // fail due to a missing asset directory.
+    // -----------------------------------------------------------------------
+    const pythonDepsLayer = new lambda.LayerVersion(this, 'PythonDepsLayer', {
+      layerVersionName: `${prefix}-python-deps`,
+      code: lambda.Code.fromAsset('./lambda-layer'),
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+      description: 'boto3, aioboto3, aws-lambda-powertools, httpx, beautifulsoup4, numpy, msgpack',
+    });
+
+    // -----------------------------------------------------------------------
+    // 13. SSM Parameter Store: export every ARN/ID (16 parameters)
     // -----------------------------------------------------------------------
     const base = `/au-jibun-bank/${env}`;
     const param = (scopeId: string, name: string, value: string): ssm.StringParameter =>
@@ -581,6 +597,9 @@ export class SharedInfraStack extends cdk.Stack {
       `${base}/iam/lambda-permission-boundary-arn`,
       permissionBoundary.managedPolicyArn,
     );
+
+    // Lambda Layer (1)
+    param('PPythonDepsLayerArn', `${base}/lambda/python-deps-layer-arn`, pythonDepsLayer.layerVersionArn);
 
     // -----------------------------------------------------------------------
     // Tagging: every resource in the stack gets an Environment tag.

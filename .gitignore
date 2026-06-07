@@ -34,6 +34,10 @@ infra/lib/**/*.d.ts
 .DS_Store
 Thumbs.db
 
+# Lambda Layer (built by CI; pip-installed packages are not committed)
+infra/lambda-layer/python/*
+!infra/lambda-layer/python/.gitkeep
+
 # Environment
 .env
 .env.*
