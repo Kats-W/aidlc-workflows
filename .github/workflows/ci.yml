@@ -123,9 +123,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         working-directory: ${{ github.workspace }}
         run: |
-          PR=$(gh pr list --repo "$REPO" --search "is:merged" --state merged \
-            --json number,mergeCommitOid \
-            --jq ".[] | select(.mergeCommitOid == \"$SHA\") | .number" | head -1)
+          PR=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number' 2>/dev/null || echo "")
           if [ -z "$PR" ]; then
             echo "No merged PR found for SHA $SHA, skipping comment"
             exit 0

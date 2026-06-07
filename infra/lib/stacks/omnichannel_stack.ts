@@ -211,19 +211,25 @@ export class OmnichannelStack extends cdk.Stack {
           },
         },
         {
-          // 010: Collect customer voice via Lex ASR. $.Lex.InputTranscript carries
-          // the full utterance regardless of intent, passed to RAG as userInput.
+          // 010: Collect customer voice via Lex ASR (ConnectParticipantWithLexBot is the correct
+          // action type for Lex v2; GetParticipantInput only handles DTMF).
+          // All utterances hit FallbackIntent → $.Lex.InputTranscript → RAG Lambda.
           Identifier: 'aab00001-0000-0000-0000-000000000010',
-          Type: 'GetParticipantInput',
+          Type: 'ConnectParticipantWithLexBot',
           Parameters: {
             Text: 'ご質問をどうぞ。',
             LexV2Bot: { AliasArn: '${LexBotAliasArn}' },
-            Timeout: '6',
           },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000002',
+            Conditions: [
+              {
+                NextAction: 'aab00001-0000-0000-0000-000000000002',
+                Condition: { Operator: 'Equals', Operands: ['FallbackIntent'] },
+              },
+            ],
             Errors: [
-              { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'InputTimeLimitExceeded' },
+              { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'NoMatchingCondition' },
               { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'NoMatchingError' },
             ],
           },
