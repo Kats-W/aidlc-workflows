@@ -130,42 +130,42 @@ export class OmnichannelStack extends cdk.Stack {
     // -----------------------------------------------------------------------
     // 4. Main AI contact flow (minimal bootstrap version).
     //
-    // The full RAG-loop flow requires verifying the exact Connect contact
-    // flow JSON schema (action types, error types, attribute reference
-    // format). This placeholder deploys successfully and creates the
-    // contact flow resource; the full logic is added via the Connect
-    // console once this baseline is confirmed, then exported and committed
-    // as a follow-up CDK update.
+    // Action identifiers must be UUID-format strings (Connect rejects
+    // non-UUID identifiers). ASCII-only text avoids encoding issues.
     // -----------------------------------------------------------------------
     const contactFlowContent = JSON.stringify({
       Version: '2019-10-30',
-      StartAction: 'PlayWelcome',
+      StartAction: 'a1b2c3d4-0001-0001-0001-000000000001',
       Metadata: {
-        entryPointPosition: { x: 20, y: 20 },
+        entryPointPosition: { x: 75, y: 20 },
         ActionMetadata: {
-          PlayWelcome: { position: { x: 20, y: 20 } },
-          Disconnect: { position: { x: 300, y: 20 } },
+          'a1b2c3d4-0001-0001-0001-000000000001': { position: { x: 75, y: 20 } },
+          'a1b2c3d4-0001-0001-0001-000000000002': { position: { x: 400, y: 20 } },
         },
       },
       Actions: [
         {
-          Identifier: 'PlayWelcome',
+          Identifier: 'a1b2c3d4-0001-0001-0001-000000000001',
           Type: 'MessageParticipant',
           Parameters: {
-            Text: 'auじぶん銀行AIアシスタントです。ただいまシステムを準備中です。後ほどおかけ直しください。',
+            Text: 'Thank you for calling au Jibun Bank. Please call back later.',
             TextToSpeechType: 'text',
           },
           Transitions: {
-            NextAction: 'Disconnect',
+            NextAction: 'a1b2c3d4-0001-0001-0001-000000000002',
             Errors: [],
             Conditions: [],
           },
         },
         {
-          Identifier: 'Disconnect',
+          Identifier: 'a1b2c3d4-0001-0001-0001-000000000002',
           Type: 'DisconnectParticipant',
           Parameters: {},
-          Transitions: {},
+          Transitions: {
+            NextAction: '',
+            Errors: [],
+            Conditions: [],
+          },
         },
       ],
     });
