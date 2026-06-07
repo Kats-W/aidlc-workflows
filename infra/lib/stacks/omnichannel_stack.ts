@@ -127,112 +127,37 @@ export class OmnichannelStack extends cdk.Stack {
     //   hit=false → InvokeEscalation → SetEscalationQueue → Transfer
     //   errors    → Disconnect
     // -----------------------------------------------------------------------
-    const escalationQueueArnForFlow = new cdk.CfnParameter(this, 'EscalationQueueArnForFlow', {
-      type: 'AWS::SSM::Parameter::Value<String>',
-      default: `${base}/connect/escalation-queue-arn`,
-      description: 'Escalation queue ARN resolved from SSM for the contact flow',
-    });
-
-    const ragHandlerArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-rag-handler`;
-    const escalationLambdaArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-escalation`;
-
-    // Build template with ${EscalationQueueArn} placeholder; Fn::Sub replaces
-    // it with the CfnParameter value (the real queue ARN) at deploy time.
-    // CheckAttribute uses the bare attribute name "hit" (not "$.External.hit").
-    const contactFlowTemplate = JSON.stringify({
+    // -----------------------------------------------------------------------
+    // 4. Main AI contact flow (minimal bootstrap version).
+    //
+    // The full RAG-loop flow requires verifying the exact Connect contact
+    // flow JSON schema (action types, error types, attribute reference
+    // format). This placeholder deploys successfully and creates the
+    // contact flow resource; the full logic is added via the Connect
+    // console once this baseline is confirmed, then exported and committed
+    // as a follow-up CDK update.
+    // -----------------------------------------------------------------------
+    const contactFlowContent = JSON.stringify({
       Version: '2019-10-30',
       StartAction: 'PlayWelcome',
       Metadata: {
         entryPointPosition: { x: 20, y: 20 },
-        ActionMetadata: {},
+        ActionMetadata: {
+          PlayWelcome: { position: { x: 20, y: 20 } },
+          Disconnect: { position: { x: 300, y: 20 } },
+        },
       },
       Actions: [
         {
           Identifier: 'PlayWelcome',
           Type: 'MessageParticipant',
           Parameters: {
-            Text: 'auじぶん銀行AIアシスタントです。ご質問をどうぞ。',
+            Text: 'auじぶん銀行AIアシスタントです。ただいまシステムを準備中です。後ほどおかけ直しください。',
             TextToSpeechType: 'text',
           },
-          Transitions: {
-            NextAction: 'InvokeRag',
-            Errors: [],
-            Conditions: [],
-          },
-        },
-        {
-          Identifier: 'InvokeRag',
-          Type: 'InvokeLambdaFunction',
-          Parameters: {
-            LambdaFunctionARN: ragHandlerArn,
-            InvocationTimeLimitSeconds: '8',
-          },
-          Transitions: {
-            NextAction: 'CheckRagHit',
-            Errors: [{ NextAction: 'InvokeEscalation', ErrorType: 'NoMatchingError' }],
-            Conditions: [],
-          },
-        },
-        {
-          Identifier: 'CheckRagHit',
-          Type: 'CheckAttribute',
-          Parameters: {
-            Attribute: 'hit',
-            AttributeType: 'External',
-          },
-          Transitions: {
-            NextAction: 'InvokeEscalation',
-            Errors: [{ NextAction: 'InvokeEscalation', ErrorType: 'NoMatchingCondition' }],
-            Conditions: [
-              { NextAction: 'PlayAnswer', Operator: 'Equals', Operands: ['true'] },
-            ],
-          },
-        },
-        {
-          Identifier: 'PlayAnswer',
-          Type: 'MessageParticipant',
-          Parameters: {
-            Text: '$.External.response_text',
-            TextToSpeechType: 'text',
-          },
-          Transitions: {
-            NextAction: 'InvokeRag',
-            Errors: [],
-            Conditions: [],
-          },
-        },
-        {
-          Identifier: 'InvokeEscalation',
-          Type: 'InvokeLambdaFunction',
-          Parameters: {
-            LambdaFunctionARN: escalationLambdaArn,
-            InvocationTimeLimitSeconds: '8',
-          },
-          Transitions: {
-            NextAction: 'SetEscalationQueue',
-            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingError' }],
-            Conditions: [],
-          },
-        },
-        {
-          Identifier: 'SetEscalationQueue',
-          Type: 'UpdateContactTargetQueue',
-          Parameters: {
-            QueueId: '${EscalationQueueArn}',
-          },
-          Transitions: {
-            NextAction: 'TransferToQueue',
-            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingError' }],
-            Conditions: [],
-          },
-        },
-        {
-          Identifier: 'TransferToQueue',
-          Type: 'TransferContactToQueue',
-          Parameters: {},
           Transitions: {
             NextAction: 'Disconnect',
-            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingError' }],
+            Errors: [],
             Conditions: [],
           },
         },
@@ -243,10 +168,6 @@ export class OmnichannelStack extends cdk.Stack {
           Transitions: {},
         },
       ],
-    });
-
-    const contactFlowContent = cdk.Fn.sub(contactFlowTemplate, {
-      EscalationQueueArn: escalationQueueArnForFlow.valueAsString,
     });
 
     const contactFlow = new connect.CfnContactFlow(this, 'AiContactFlow', {
