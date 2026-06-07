@@ -433,6 +433,34 @@ export class SharedInfraStack extends cdk.Stack {
     }
 
     // -----------------------------------------------------------------------
+    // 10b. Connect HoursOfOperation (24/7 JST) + Escalation Queue
+    //
+    // RETAIN both resources to avoid queue-name cooldown on rollback,
+    // mirroring the same pattern used for the Connect instance itself.
+    // -----------------------------------------------------------------------
+    const connectHours = new connect.CfnHoursOfOperation(this, 'ConnectHours247', {
+      instanceArn: connectInstanceArn,
+      name: `${prefix}-24x7`,
+      timeZone: 'Asia/Tokyo',
+      config: [
+        'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY',
+      ].map((day) => ({
+        day,
+        startTime: { hours: 0, minutes: 0 },
+        endTime: { hours: 23, minutes: 59 },
+      })),
+    });
+    connectHours.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+
+    const connectEscalationQueue = new connect.CfnQueue(this, 'ConnectEscalationQueue', {
+      instanceArn: connectInstanceArn,
+      name: `${prefix}-escalation`,
+      hoursOfOperationArn: connectHours.attrHoursOfOperationArn,
+      description: 'Human escalation queue for au Jibun Bank AI Agent',
+    });
+    connectEscalationQueue.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+
+    // -----------------------------------------------------------------------
     // 11. Amazon Lex v2 bot shell (ja-JP) (L1)
     // -----------------------------------------------------------------------
     const lexServiceRole = new iam.Role(this, 'LexServiceRole', {
@@ -511,13 +539,7 @@ export class SharedInfraStack extends cdk.Stack {
     // Connect (3)
     param('PConnectInstanceArn', `${base}/connect/instance-arn`, connectInstanceArn);
     param('PConnectInstanceId', `${base}/connect/instance-id`, connectInstanceId);
-    // Placeholder: update to the real Connect escalation queue ARN once the queue
-    // is provisioned via the Connect admin console or a dedicated stack.
-    param(
-      'PConnectEscalationQueueArn',
-      `${base}/connect/escalation-queue-arn`,
-      `arn:aws:connect:${this.region}:${account}:instance/placeholder/queue/placeholder`,
-    );
+    param('PConnectEscalationQueueArn', `${base}/connect/escalation-queue-arn`, connectEscalationQueue.attrQueueArn);
 
     // Lex (2)
     param('PLexBotId', `${base}/lex/bot-id`, lexBot.attrId);

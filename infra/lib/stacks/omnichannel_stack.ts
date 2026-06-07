@@ -4,6 +4,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as kms from 'aws-cdk-lib/aws-kms';
+import * as connect from 'aws-cdk-lib/aws-connect';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as logs from 'aws-cdk-lib/aws-logs';
 
@@ -49,6 +50,7 @@ export class OmnichannelStack extends cdk.Stack {
     // Escalation queue ARN for US-4.3 (TransferToQueue). Provisioned by Connect
     // admin and published to SSM; consumed here for the contact-flow wiring.
     const escalationQueueArn = p(`${base}/connect/escalation-queue-arn`);
+    const connectInstanceArn = p(`${base}/connect/instance-arn`);
 
     const cmk = kms.Key.fromKeyArn(this, 'SharedCmk', cmkArn);
     const permissionBoundary = iam.ManagedPolicy.fromManagedPolicyArn(
@@ -103,7 +105,155 @@ export class OmnichannelStack extends cdk.Stack {
     cmk.grantEncryptDecrypt(channelSwitchRole);
 
     // -----------------------------------------------------------------------
-    // 3. Error alarm.
+    // 3. Connect invoke permission for ChannelSwitch.
+    // -----------------------------------------------------------------------
+    channelSwitch.addPermission('AllowConnectInvoke', {
+      principal: new iam.ServicePrincipal('connect.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+    });
+
+    // -----------------------------------------------------------------------
+    // 4. Main AI contact flow.
+    //
+    // Lambda ARNs are deterministic from the naming prefix, so they can be
+    // embedded directly in the JSON content string without SSM dynamic refs
+    // (which CloudFormation resolves at resource level only, not inside strings).
+    //
+    // Flow: Welcome → InvokeRag → CheckHit
+    //   hit=true  → PlayAnswer → InvokeRag (conversation loop)
+    //   hit=false → InvokeEscalation → SetEscalationQueue → Transfer
+    //   errors    → Disconnect
+    // -----------------------------------------------------------------------
+    const ragHandlerArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-rag-handler`;
+    const escalationLambdaArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-escalation`;
+
+    const contactFlowContent = JSON.stringify({
+      Version: '2019-10-30',
+      StartAction: 'PlayWelcome',
+      Metadata: {
+        entryPointPosition: { x: 20, y: 20 },
+        ActionMetadata: {},
+      },
+      Actions: [
+        {
+          Identifier: 'PlayWelcome',
+          Type: 'MessageParticipant',
+          Parameters: {
+            Text: 'auじぶん銀行AIアシスタントです。ご質問をどうぞ。',
+            TextToSpeechType: 'text',
+          },
+          Transitions: {
+            NextAction: 'InvokeRag',
+            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Conditions: [],
+          },
+        },
+        {
+          Identifier: 'InvokeRag',
+          Type: 'InvokeLambdaFunction',
+          Parameters: {
+            LambdaFunctionARN: ragHandlerArn,
+            InvocationTimeLimitSeconds: '8',
+            LambdaInvocationAttributes: {},
+          },
+          Transitions: {
+            NextAction: 'CheckRagHit',
+            Errors: [
+              { NextAction: 'InvokeEscalation', ErrorType: 'NoMatchingCondition' },
+              { NextAction: 'InvokeEscalation', ErrorType: 'InvalidLambdaResponse' },
+            ],
+            Conditions: [],
+          },
+        },
+        {
+          Identifier: 'CheckRagHit',
+          Type: 'CheckAttribute',
+          Parameters: {
+            Attribute: '$.External.hit',
+            AttributeType: 'External',
+          },
+          Transitions: {
+            NextAction: 'InvokeEscalation',
+            Errors: [{ NextAction: 'InvokeEscalation', ErrorType: 'NoMatchingCondition' }],
+            Conditions: [
+              { NextAction: 'PlayAnswer', Operator: 'Equals', Operands: ['true'] },
+            ],
+          },
+        },
+        {
+          Identifier: 'PlayAnswer',
+          Type: 'MessageParticipant',
+          Parameters: {
+            Text: '$.External.response_text',
+            TextToSpeechType: 'text',
+          },
+          Transitions: {
+            NextAction: 'InvokeRag',
+            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Conditions: [],
+          },
+        },
+        {
+          Identifier: 'InvokeEscalation',
+          Type: 'InvokeLambdaFunction',
+          Parameters: {
+            LambdaFunctionARN: escalationLambdaArn,
+            InvocationTimeLimitSeconds: '8',
+            LambdaInvocationAttributes: {},
+          },
+          Transitions: {
+            NextAction: 'SetEscalationQueue',
+            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Conditions: [],
+          },
+        },
+        {
+          Identifier: 'SetEscalationQueue',
+          Type: 'UpdateContactTargetQueue',
+          Parameters: {
+            QueueId: '$.External.escalation_queue_arn',
+          },
+          Transitions: {
+            NextAction: 'TransferToQueue',
+            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Conditions: [],
+          },
+        },
+        {
+          Identifier: 'TransferToQueue',
+          Type: 'TransferContactToQueue',
+          Parameters: {},
+          Transitions: {
+            NextAction: 'Disconnect',
+            Errors: [{ NextAction: 'Disconnect', ErrorType: 'NoMatchingCondition' }],
+            Conditions: [],
+          },
+        },
+        {
+          Identifier: 'Disconnect',
+          Type: 'DisconnectParticipant',
+          Parameters: {},
+          Transitions: {},
+        },
+      ],
+    });
+
+    const contactFlow = new connect.CfnContactFlow(this, 'AiContactFlow', {
+      instanceArn: connectInstanceArn,
+      name: `${prefix}-ai-agent`,
+      type: 'CONTACT_FLOW',
+      description: 'Main AI conversation flow: RAG handler loop with human escalation',
+      content: contactFlowContent,
+    });
+
+    // Publish contact flow ARN for Connect admin configuration.
+    new ssm.StringParameter(this, 'PAiContactFlowArn', {
+      parameterName: `${base}/connect/ai-contact-flow-arn`,
+      stringValue: contactFlow.attrContactFlowArn,
+    });
+
+    // -----------------------------------------------------------------------
+    // 5. Error alarm.
     // -----------------------------------------------------------------------
     new cloudwatch.Alarm(this, 'ChannelSwitchErrorAlarm', {
       alarmName: `${prefix}-channel-switch-errors`,
@@ -115,7 +265,7 @@ export class OmnichannelStack extends cdk.Stack {
     });
 
     // -----------------------------------------------------------------------
-    // 4. Tags + outputs.
+    // 6. Tags + outputs.
     // -----------------------------------------------------------------------
     cdk.Tags.of(this).add('Environment', env);
     cdk.Tags.of(this).add('Unit', 'U-04');
@@ -124,7 +274,7 @@ export class OmnichannelStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ChannelSwitchFunctionName', {
       value: channelSwitch.functionName,
     });
-    // Exported for the Connect contact flow's TransferToQueue block (US-4.3).
     new cdk.CfnOutput(this, 'EscalationQueueArn', { value: escalationQueueArn });
+    new cdk.CfnOutput(this, 'AiContactFlowArn', { value: contactFlow.attrContactFlowArn });
   }
 }
