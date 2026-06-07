@@ -114,3 +114,25 @@ jobs:
         run: npx cdk deploy AuJibunBank-dev-Improvement --context env=dev --require-approval never
       - name: Deploy Dashboard
         run: npx cdk deploy AuJibunBank-dev-Dashboard --context env=dev --require-approval never
+      - name: Comment deploy result on merged PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          PR=$(gh pr list --repo "$REPO" --search "is:merged" --state merged \
+            --json number,mergeCommitOid \
+            --jq ".[] | select(.mergeCommitOid == \"$SHA\") | .number" | head -1)
+          if [ -z "$PR" ]; then
+            echo "No merged PR found for SHA $SHA, skipping comment"
+            exit 0
+          fi
+          if [ "${{ job.status }}" = "success" ]; then
+            BODY="✅ **CDK Deploy (dev) succeeded** — all stacks deployed at \`$SHA\`"
+          else
+            BODY="❌ **CDK Deploy (dev) failed** — [View logs]($RUN_URL)"
+          fi
+          gh pr comment "$PR" --repo "$REPO" --body "$BODY"

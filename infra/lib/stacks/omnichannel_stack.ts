@@ -201,7 +201,6 @@ export class OmnichannelStack extends cdk.Stack {
           Identifier: 'aab00001-0000-0000-0000-000000000001',
           Type: 'MessageParticipant',
           Parameters: {
-            SkipWhenDTMFBufferEnabled: 'false',
             Text: 'auじぶん銀行AIアシスタントです。ご質問をどうぞ。',
           },
           Transitions: {
@@ -223,7 +222,6 @@ export class OmnichannelStack extends cdk.Stack {
           },
           Transitions: {
             NextAction: 'aab00001-0000-0000-0000-000000000002',
-            Conditions: [],
             Errors: [
               { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'InputTimeLimitExceeded' },
               { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'NoMatchingError' },
@@ -274,7 +272,6 @@ export class OmnichannelStack extends cdk.Stack {
           Identifier: 'aab00001-0000-0000-0000-000000000004',
           Type: 'MessageParticipant',
           Parameters: {
-            SkipWhenDTMFBufferEnabled: 'false',
             Text: '$.External.answer',
           },
           Transitions: {
