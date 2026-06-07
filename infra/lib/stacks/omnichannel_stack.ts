@@ -128,46 +128,148 @@ export class OmnichannelStack extends cdk.Stack {
     //   errors    → Disconnect
     // -----------------------------------------------------------------------
     // -----------------------------------------------------------------------
-    // 4. Main AI contact flow (minimal bootstrap version).
+    // 4. Main AI contact flow.
     //
-    // Action identifiers must be UUID-format strings (Connect rejects
-    // non-UUID identifiers). ASCII-only text avoids encoding issues.
+    // JSON schema confirmed from exported sample flow:
+    //   - MessageParticipant params: SkipWhenDTMFBufferEnabled + Text
+    //   - MessageParticipant transitions: {NextAction} only (no Errors/Conditions)
+    //   - DisconnectParticipant transitions: {} (empty)
+    //   - Attribute checking: Compare (not CheckAttribute)
+    //   - Condition nesting: {NextAction, Condition:{Operator, Operands}}
+    //
+    // Escalation queue ARN injected via CfnParameter + Fn::Sub at deploy time
+    // (SSM dynamic refs don't resolve inside JSON strings).
     // -----------------------------------------------------------------------
-    const contactFlowContent = JSON.stringify({
+    const escalationQueueArnForFlow = new cdk.CfnParameter(this, 'EscalationQueueArnForFlow', {
+      type: 'AWS::SSM::Parameter::Value<String>',
+      default: `${base}/connect/escalation-queue-arn`,
+      description: 'Escalation queue ARN resolved from SSM for the contact flow',
+    });
+
+    const ragHandlerArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-rag-handler`;
+    const escalationLambdaArn = `arn:aws:lambda:${this.region}:${account}:function:${prefix}-escalation`;
+
+    const contactFlowTemplate = JSON.stringify({
       Version: '2019-10-30',
-      StartAction: 'a1b2c3d4-0001-0001-0001-000000000001',
+      StartAction: 'aab00001-0000-0000-0000-000000000001',
       Metadata: {
-        entryPointPosition: { x: 75, y: 20 },
+        entryPointPosition: { x: 14.4, y: 14.4 },
         ActionMetadata: {
-          'a1b2c3d4-0001-0001-0001-000000000001': { position: { x: 75, y: 20 } },
-          'a1b2c3d4-0001-0001-0001-000000000002': { position: { x: 400, y: 20 } },
+          'aab00001-0000-0000-0000-000000000001': { position: { x: 75, y: 20 } },
+          'aab00001-0000-0000-0000-000000000002': { position: { x: 300, y: 20 } },
+          'aab00001-0000-0000-0000-000000000003': { position: { x: 530, y: 20 } },
+          'aab00001-0000-0000-0000-000000000004': { position: { x: 760, y: 20 } },
+          'aab00001-0000-0000-0000-000000000005': { position: { x: 760, y: 200 } },
+          'aab00001-0000-0000-0000-000000000006': { position: { x: 990, y: 200 } },
+          'aab00001-0000-0000-0000-000000000007': { position: { x: 1220, y: 200 } },
+          'aab00001-0000-0000-0000-000000000008': { position: { x: 1220, y: 380 } },
         },
       },
       Actions: [
         {
-          Identifier: 'a1b2c3d4-0001-0001-0001-000000000001',
+          Identifier: 'aab00001-0000-0000-0000-000000000001',
           Type: 'MessageParticipant',
           Parameters: {
-            Text: 'Thank you for calling au Jibun Bank. Please call back later.',
-            TextToSpeechType: 'text',
+            SkipWhenDTMFBufferEnabled: 'false',
+            Text: 'auじぶん銀行AIアシスタントです。ご質問をどうぞ。',
           },
           Transitions: {
-            NextAction: 'a1b2c3d4-0001-0001-0001-000000000002',
-            Errors: [],
-            Conditions: [],
+            NextAction: 'aab00001-0000-0000-0000-000000000002',
           },
         },
         {
-          Identifier: 'a1b2c3d4-0001-0001-0001-000000000002',
-          Type: 'DisconnectParticipant',
-          Parameters: {},
+          Identifier: 'aab00001-0000-0000-0000-000000000002',
+          Type: 'InvokeLambdaFunction',
+          Parameters: {
+            LambdaFunctionARN: ragHandlerArn,
+            InvocationTimeLimitSeconds: '8',
+          },
           Transitions: {
-            NextAction: '',
-            Errors: [],
-            Conditions: [],
+            NextAction: 'aab00001-0000-0000-0000-000000000003',
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'NoMatchingError' },
+            ],
           },
         },
+        {
+          Identifier: 'aab00001-0000-0000-0000-000000000003',
+          Type: 'Compare',
+          Parameters: {
+            ComparisonValue: '$.External.hit',
+          },
+          Transitions: {
+            NextAction: 'aab00001-0000-0000-0000-000000000005',
+            Conditions: [
+              {
+                NextAction: 'aab00001-0000-0000-0000-000000000004',
+                Condition: { Operator: 'Equals', Operands: ['true'] },
+              },
+            ],
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000005', ErrorType: 'NoMatchingCondition' },
+            ],
+          },
+        },
+        {
+          Identifier: 'aab00001-0000-0000-0000-000000000004',
+          Type: 'MessageParticipant',
+          Parameters: {
+            SkipWhenDTMFBufferEnabled: 'false',
+            Text: '$.External.response_text',
+          },
+          Transitions: {
+            NextAction: 'aab00001-0000-0000-0000-000000000002',
+          },
+        },
+        {
+          Identifier: 'aab00001-0000-0000-0000-000000000005',
+          Type: 'InvokeLambdaFunction',
+          Parameters: {
+            LambdaFunctionARN: escalationLambdaArn,
+            InvocationTimeLimitSeconds: '8',
+          },
+          Transitions: {
+            NextAction: 'aab00001-0000-0000-0000-000000000006',
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
+            ],
+          },
+        },
+        {
+          Identifier: 'aab00001-0000-0000-0000-000000000006',
+          Type: 'UpdateContactTargetQueue',
+          Parameters: {
+            QueueId: '${EscalationQueueArn}',
+          },
+          Transitions: {
+            NextAction: 'aab00001-0000-0000-0000-000000000007',
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
+            ],
+          },
+        },
+        {
+          Identifier: 'aab00001-0000-0000-0000-000000000007',
+          Type: 'TransferContactToQueue',
+          Parameters: {},
+          Transitions: {
+            NextAction: 'aab00001-0000-0000-0000-000000000008',
+            Errors: [
+              { NextAction: 'aab00001-0000-0000-0000-000000000008', ErrorType: 'NoMatchingError' },
+            ],
+          },
+        },
+        {
+          Identifier: 'aab00001-0000-0000-0000-000000000008',
+          Type: 'DisconnectParticipant',
+          Parameters: {},
+          Transitions: {},
+        },
       ],
+    });
+
+    const contactFlowContent = cdk.Fn.sub(contactFlowTemplate, {
+      EscalationQueueArn: escalationQueueArnForFlow.valueAsString,
     });
 
     const contactFlow = new connect.CfnContactFlow(this, 'AiContactFlow', {
