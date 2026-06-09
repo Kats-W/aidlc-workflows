@@ -118,10 +118,9 @@ def _invoke_embedder(result: DiffResult) -> None:
     # Batch upserts; send deletes only in the first batch.
     batches = range(0, max(len(upsert_items), 1), _EMBEDDER_BATCH_SIZE)
     for batch_start in batches:
-        payload = {
-            "upsert": upsert_items[batch_start : batch_start + _EMBEDDER_BATCH_SIZE],
-            "delete": deletes if batch_start == 0 else [],
-        }
+        upsert_batch = upsert_items[batch_start : batch_start + _EMBEDDER_BATCH_SIZE]
+        delete_batch: list[str] = deletes if batch_start == 0 else []
+        payload = {"upsert": upsert_batch, "delete": delete_batch}
         client.invoke(
             FunctionName=function_name,
             InvocationType="Event",  # asynchronous
@@ -131,8 +130,8 @@ def _invoke_embedder(result: DiffResult) -> None:
             "embedder batch invoked",
             extra={
                 "batch_start": batch_start,
-                "upsert_count": len(payload["upsert"]),
-                "delete_count": len(payload["delete"]),
+                "upsert_count": len(upsert_batch),
+                "delete_count": len(delete_batch),
             },
         )
 
