@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass, field
+from urllib.parse import urljoin, urlparse
 
 from aws_lambda_powertools import Logger
 from bs4 import BeautifulSoup
@@ -87,6 +88,24 @@ class ContentParser:
     def compute_hash(self, text: str) -> str:
         """Return the SHA-256 hex digest of ``text`` (UTF-8 encoded)."""
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    def extract_links(self, html: str, base_url: str) -> list[str]:
+        """Return absolute HTTP/HTTPS links found in ``html``, resolved against ``base_url``.
+
+        Fragments are stripped; query strings are preserved.
+        """
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+        except Exception:
+            return []
+        links: list[str] = []
+        for tag in soup.find_all("a", href=True):
+            href = str(tag["href"]).strip()
+            absolute = urljoin(base_url, href)
+            parsed = urlparse(absolute)
+            if parsed.scheme in ("http", "https"):
+                links.append(parsed._replace(fragment="").geturl())
+        return links
 
     def _extract_text(self, html: str) -> str:
         """Extract and normalise the visible body text from ``html``."""

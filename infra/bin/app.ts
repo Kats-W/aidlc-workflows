@@ -32,7 +32,7 @@ new KnowledgePipelineStack(app, `AuJibunBank-${env}-KnowledgePipeline`, {
   description: `au Jibun Bank AI Agent — Knowledge Pipeline (U-02) (${env})`,
   targetUrls: [
     'https://www.jibunbank.co.jp/',
-    'https://www.jibunbank.co.jp/faq/',
+    'https://help.jibunbank.co.jp/',
   ],
 });
 
