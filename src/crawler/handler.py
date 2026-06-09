@@ -92,30 +92,48 @@ async def _crawl_url(
     return chunks, html
 
 
+_EMBEDDER_BATCH_SIZE = 50  # ~300 KB per batch; Event invocation limit is 1 MB
+
+
 def _invoke_embedder(result: DiffResult) -> None:
-    """Asynchronously invoke EmbedderLambda with the diff payload."""
+    """Asynchronously invoke EmbedderLambda in batches to stay under the 1 MB Event limit."""
     function_name = os.environ.get("EMBEDDER_FUNCTION_NAME")
     if not function_name:
         logger.warning("EMBEDDER_FUNCTION_NAME unset; skipping embedder invoke")
         return
-    payload = {
-        "upsert": [
-            {
-                "chunkId": c.chunk_id,
-                "sourceUrl": c.source_url,
-                "index": c.index,
-                "text": c.text,
-                "contentHash": c.content_hash,
-            }
-            for c in (*result.added, *result.changed)
-        ],
-        "delete": list(result.deleted),
-    }
-    boto3.client("lambda").invoke(
-        FunctionName=function_name,
-        InvocationType="Event",  # asynchronous
-        Payload=json.dumps(payload).encode("utf-8"),
-    )
+
+    upsert_items = [
+        {
+            "chunkId": c.chunk_id,
+            "sourceUrl": c.source_url,
+            "index": c.index,
+            "text": c.text,
+            "contentHash": c.content_hash,
+        }
+        for c in (*result.added, *result.changed)
+    ]
+    deletes = list(result.deleted)
+    client = boto3.client("lambda")
+
+    # Batch upserts; send deletes only in the first batch.
+    batches = range(0, max(len(upsert_items), 1), _EMBEDDER_BATCH_SIZE)
+    for batch_start in batches:
+        upsert_batch = upsert_items[batch_start : batch_start + _EMBEDDER_BATCH_SIZE]
+        delete_batch: list[str] = deletes if batch_start == 0 else []
+        payload = {"upsert": upsert_batch, "delete": delete_batch}
+        client.invoke(
+            FunctionName=function_name,
+            InvocationType="Event",  # asynchronous
+            Payload=json.dumps(payload).encode("utf-8"),
+        )
+        logger.info(
+            "embedder batch invoked",
+            extra={
+                "batch_start": batch_start,
+                "upsert_count": len(upsert_batch),
+                "delete_count": len(delete_batch),
+            },
+        )
 
 
 async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -188,7 +206,14 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     result = await differ.diff(all_chunks)
     await differ.commit(result)
     if not result.is_empty:
-        _invoke_embedder(result)
+        try:
+            _invoke_embedder(result)
+        except Exception:
+            # Log but do not re-raise: diff is already committed, so the next
+            # scheduled crawl will detect no changes and skip Embedder invocation.
+            # Re-raising would cause Lambda to fail and AWS to retry from scratch,
+            # which corrupts ContentDiff (prior-run chunks get deleted on retry).
+            logger.exception("embedder invocation failed; diff committed but not forwarded")
 
     summary = {
         "crawled": crawled,
