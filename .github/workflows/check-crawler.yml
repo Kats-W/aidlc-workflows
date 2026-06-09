@@ -21,22 +21,23 @@ jobs:
         run: |
           LOG_GROUP="/aws/lambda/au-jibun-bank-dev-crawler"
 
-          # Get the most recent log stream
+          # Get the most recent log stream (head -1 avoids capturing NextToken line from --output text)
           STREAM=$(aws logs describe-log-streams \
             --log-group-name "$LOG_GROUP" \
             --order-by LastEventTime \
             --descending \
             --max-items 1 \
             --query 'logStreams[0].logStreamName' \
-            --output text)
+            --output text | head -1)
 
           echo "Latest log stream: $STREAM"
           echo ""
 
-          # Fetch the last 100 log events from that stream
+          # Fetch all log events from that stream and dump relevant lines
           aws logs get-log-events \
             --log-group-name "$LOG_GROUP" \
             --log-stream-name "$STREAM" \
             --start-from-head \
+            --limit 10000 \
             --query 'events[*].message' \
-            --output text | grep -E "(crawl finished|crawled|added|changed|deleted|errors|timeout|ERROR|error)" || echo "(no summary lines found)"
+            --output text | grep -E "(crawl finished|crawled|added|changed|deleted|errors|timeout|WARNING|ERROR|error|exception|Exception)" || echo "(no summary lines found)"
