@@ -372,6 +372,12 @@ export class SharedInfraStack extends cdk.Stack {
           ],
           resources: ['*'], // EC2 ENI actions for Lambda VPC access require "*".
         }),
+        new iam.PolicyStatement({
+          sid: 'LambdaInvoke',
+          effect: iam.Effect.ALLOW,
+          actions: ['lambda:InvokeFunction'],
+          resources: [`arn:aws:lambda:${this.region}:${account}:function:${prefix}-*`],
+        }),
       ],
     });
     permissionBoundary.applyRemovalPolicy(dataRemovalPolicy);
