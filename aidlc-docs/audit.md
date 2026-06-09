@@ -2,6 +2,37 @@
 
 ---
 
+## Operations Phase — クローラー/Embedder 本番稼働確認 COMPLETE
+
+**Timestamp**: 2026-06-09T22:15:00Z
+**User Input**: クローラーの本番動作確認・Embedder ログ確認・AIDLC 漏れ確認を依頼
+**AI Response**: Operations Phase で発生した一連のバグを特定・修正し、U-02 ナレッジパイプラインの本番稼働を確認した。主な作業は以下のとおり。
+
+**PR #31 — check-crawler.yml 修正**（2026-06-09）:
+`aws logs describe-log-streams --output text` が ストリーム名と "None"（NextToken）の2行を返すため `$STREAM` 変数が壊れ `ResourceNotFoundException` が発生していたバグを修正。`| head -1` 追加、grep パターン拡張（WARNING/ERROR/exception）、`--limit 10000` 追加。
+
+**PR #32 — IAM Boundary: dynamodb:Scan 追加**（2026-06-09）:
+DifferEngine._load_stored_hashes が ContentDiff テーブルを Scan する際に `AccessDeniedException` が発生。Permission Boundary の `DynamoDbAccess` に `dynamodb:Scan` が欠けていたため追加。
+
+**PR #33 — IAM Boundary: lambda:InvokeFunction / comprehend:DetectPiiEntities / connect:* 追加**（2026-06-09）:
+CrawlerLambda が EmbedderLambda を非同期 invoke する際に `AccessDeniedException`。横展調査により comprehend:DetectPiiEntities（U-06 ContactLensAnalyzer）・connect:SearchContacts/ListContactAnalysis/GetContactAttributes（U-06）の Boundary 不足も同時修正。
+
+**PR #34 — Embedder バッチ化 + 例外キャッチ**（2026-06-09）:
+359チャンク（〜2.1MB）が Lambda Event 上限 1MB を超え `RequestEntityTooLargeException` が発生。50件/バッチに分割（〜300KB）。また例外を catch せず Lambda が失敗→AWS が自動リトライ→2回目の実行が ContentDiff を破壊するバグを修正（try/except + logger.exception でログだけ残して正常終了）。
+
+**PR #35 — check-embedder.yml 追加**（2026-06-09）:
+EmbedderLambda（`au-jibun-bank-dev-embedder`）の最新実行ログを CloudWatch から取得する `workflow_dispatch` ワークフローを追加。check-crawler.yml と同パターン。
+
+**本番稼働確認結果**:
+- クローラー: `crawled:327 / added:327 / changed:22 / deleted:0 / errors:[]`（BFS キュー残 22,706 URL、週次スケジューラで継続）
+- Embedder: `upserted:50 / deleted:0`（Bedrock Titan v2 & VectorStore 書き込み正常、7バッチ並列実行）
+- IAM Boundary 横展調査: Embedder 必要権限（DynamoDB/S3/Bedrock/KMS/Logs）すべて Boundary 内に確認済み
+
+**残作業**: Connect コンソールでの Lambda 関連付け確認 + エンドツーエンド動作確認（電話テスト）
+**Context**: OPERATIONS — U-02 ナレッジパイプライン本番稼働確認完了。エンドツーエンドテスト待ち。
+
+---
+
 ## U-07 Admin Dashboard — Complete
 
 **Timestamp**: 2026-06-03T04:00:00Z
