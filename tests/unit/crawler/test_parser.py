@@ -97,19 +97,19 @@ def test_extract_links_includes_external() -> None:
     # extract_links returns all HTTP/HTTPS links; host filtering is the caller's job.
     parser = ContentParser()
     links = parser.extract_links(LINK_HTML, BASE)
-    assert any("external.example.com" in l for l in links)
+    assert any("external.example.com" in link for link in links)
 
 
 def test_extract_links_strips_fragment() -> None:
     parser = ContentParser()
     links = parser.extract_links(LINK_HTML, BASE)
-    assert all("#" not in l for l in links)
+    assert all("#" not in link for link in links)
 
 
 def test_extract_links_excludes_mailto() -> None:
     parser = ContentParser()
     links = parser.extract_links(LINK_HTML, BASE)
-    assert not any("mailto" in l for l in links)
+    assert not any("mailto" in link for link in links)
 
 
 def test_extract_links_empty_on_bad_html() -> None:
