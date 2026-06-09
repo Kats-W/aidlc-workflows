@@ -275,6 +275,7 @@ export class SharedInfraStack extends cdk.Stack {
             'dynamodb:GetItem',
             'dynamodb:BatchGetItem',
             'dynamodb:Query',
+            'dynamodb:Scan',
             'dynamodb:PutItem',
             'dynamodb:BatchWriteItem',
             'dynamodb:UpdateItem',
