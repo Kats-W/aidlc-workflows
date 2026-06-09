@@ -71,3 +71,49 @@ def test_compute_hash_deterministic(text: str) -> None:
     parser = ContentParser()
     assert parser.compute_hash(text) == parser.compute_hash(text)
     assert len(parser.compute_hash(text)) == 64
+
+
+LINK_HTML = """
+<html><body>
+  <a href="/products/">製品</a>
+  <a href="https://www.jibunbank.co.jp/faq/">FAQ</a>
+  <a href="https://external.example.com/other">外部</a>
+  <a href="https://www.jibunbank.co.jp/page#section">アンカー付き</a>
+  <a href="mailto:info@example.com">メール</a>
+</body></html>
+"""
+
+BASE = "https://www.jibunbank.co.jp/"
+
+
+def test_extract_links_returns_absolute_same_host() -> None:
+    parser = ContentParser()
+    links = parser.extract_links(LINK_HTML, BASE)
+    assert "https://www.jibunbank.co.jp/products/" in links
+    assert "https://www.jibunbank.co.jp/faq/" in links
+
+
+def test_extract_links_includes_external() -> None:
+    # extract_links returns all HTTP/HTTPS links; host filtering is the caller's job.
+    parser = ContentParser()
+    links = parser.extract_links(LINK_HTML, BASE)
+    assert any("external.example.com" in l for l in links)
+
+
+def test_extract_links_strips_fragment() -> None:
+    parser = ContentParser()
+    links = parser.extract_links(LINK_HTML, BASE)
+    assert all("#" not in l for l in links)
+
+
+def test_extract_links_excludes_mailto() -> None:
+    parser = ContentParser()
+    links = parser.extract_links(LINK_HTML, BASE)
+    assert not any("mailto" in l for l in links)
+
+
+def test_extract_links_empty_on_bad_html() -> None:
+    parser = ContentParser()
+    # Should not raise even on garbage input.
+    links = parser.extract_links("", BASE)
+    assert isinstance(links, list)
