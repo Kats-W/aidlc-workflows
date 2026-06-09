@@ -335,6 +335,7 @@ export class SharedInfraStack extends cdk.Stack {
             'comprehend:DetectEntities',
             'comprehend:DetectKeyPhrases',
             'comprehend:DetectDominantLanguage',
+            'comprehend:DetectPiiEntities',
           ],
           // Comprehend Detect* APIs do not support resource-level scoping.
           resources: ['*'],
@@ -377,6 +378,17 @@ export class SharedInfraStack extends cdk.Stack {
           effect: iam.Effect.ALLOW,
           actions: ['lambda:InvokeFunction'],
           resources: [`arn:aws:lambda:${this.region}:${account}:function:${prefix}-*`],
+        }),
+        new iam.PolicyStatement({
+          sid: 'ConnectContactLensRead',
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'connect:SearchContacts',
+            'connect:ListContactAnalysis',
+            'connect:GetContactAttributes',
+          ],
+          // Connect Contact Lens APIs require instance-scoped ARN.
+          resources: [`arn:aws:connect:${this.region}:${account}:instance/*`],
         }),
       ],
     });
