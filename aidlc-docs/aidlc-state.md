@@ -177,6 +177,21 @@
         BedrockSuggestion / BedrockGapAnalysis に同ARNを追加
       - 品質ゲート確認済み: npx tsc --noEmit（pass）/
         npx cdk synth --context env=dev（全7スタック成功）
-- [ ] PRマージ後、cdk-deploy-dev 完了を確認 → test-rag-handler.yml 再実行で
-      hit:true / answer / sources 確認、AccessDeniedException が解消されたことを確認
+- [x] PR #44 マージ後、test-rag-handler.yml 再実行（run 27282495439、
+      head_sha 82dac306、PR #44 のマージコミット）でも同一の
+      AccessDeniedException（ap-northeast-3 foundation-model）が再発 → hit:false。
+      原因調査の結果、PR #44 は `.github/workflows/auto-merge.yml`
+      （`gh pr merge --squash --auto`、GITHUB_TOKEN 使用）により
+      github-actions[bot] が自動マージ（merged_by: github-actions[bot]）。
+      GitHub の仕様上、GITHUB_TOKEN に起因する push イベントは新たな
+      ワークフロー実行をトリガーしないため、ci.yml（cdk-deploy-dev）が
+      一度も実行されず、PR #44 のIAM修正コードは main にマージ済みだが
+      AWS には未デプロイの状態だった
+      （PR #43 は merged_by: Kats-W で人間が手動マージしたため正常に
+      cdk-deploy-dev がトリガーされていた、との対比で確認）
+- [ ] ci.yml を main ブランチに対して workflow_dispatch で手動実行し、
+      cdk-deploy-dev で PR #44 のIAM修正（ap-northeast-3 foundation-model
+      InvokeModel許可）をデプロイ → 完了後、test-rag-handler.yml 再実行で
+      hit:true / answer / sources 確認、AccessDeniedException が
+      解消されたことを確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
