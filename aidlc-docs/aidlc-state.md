@@ -131,7 +131,30 @@
         pytest tests/unit -q（330 passed、test_channel_switch.py の
         既知無関係failure 1件のみ）/ npx tsc --noEmit（pass）/
         npx cdk synth --context env=dev（全7スタック成功）
+- [x] PR #42 マージ・デプロイ後、test-rag-handler.yml 再実行（run 27271893055）も
+      依然 BEDROCK_ERROR ValidationException → hit:false。
+      モデルID再調査（WebSearch 3件、scripts/aidlc-evaluator/config/sonnet-4-6.yaml の
+      既存設定 `global.anthropic.claude-sonnet-4-6` とも整合）の結果、
+      Claude Sonnet 4.6 以降は旧モデルの `-20250514-v1:0` のような日付/バージョン
+      サフィックスが廃止されており、正しい ID は:
+      - foundation-model: `anthropic.claude-sonnet-4-6`（サフィックスなし）
+      - JP inference profile: `jp.anthropic.claude-sonnet-4-6`（東京/大阪）
+      であると判明。前回の修正で付与した `-20250514-v1:0` サフィックスが誤りだった
+- [x] モデルID再修正:
+      - src/common/bedrock_client.py: ANSWER_MODEL_ID を
+        "jp.anthropic.claude-sonnet-4-6-20250514-v1:0" →
+        "jp.anthropic.claude-sonnet-4-6" に変更
+      - conversation_stack.ts / improvement_stack.ts: foundation-model ARN /
+        inference-profile ARN からも `-20250514-v1:0` サフィックスを削除
+      - bedrock_client.py: ClientError から Code に加えて Message も例外メッセージに
+        含めるよう変更（embed/generate_answer/generate_suggestion/analyze_gap 全て）。
+        次回 ValidationException が再発した場合に rag pipeline failed ログの
+        detail フィールドで具体的な原因を確認できるようにする診断改善
+      - 品質ゲート確認済み: ruff check（pass）/ mypy src tests（pass）/
+        pytest tests/unit -q（330 passed、test_channel_switch.py の
+        既知無関係failure 1件のみ）/ npx tsc --noEmit（pass）/
+        npx cdk synth --context env=dev（全7スタック成功）
 - [ ] PRマージ後、cdk-deploy-dev 完了を確認 → test-rag-handler.yml 再実行で
       hit:true / answer / sources 確認、BEDROCK_ERROR/ValidationException が
-      解消されたことを確認
+      解消されたことを確認（再発時は詳細診断ログの detail フィールドを確認）
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
