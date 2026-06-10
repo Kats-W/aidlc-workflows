@@ -138,6 +138,9 @@ export class ConversationStack extends cdk.Stack {
         resources: [
           `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
           `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-sonnet-4-6`,
+          // The jp.* geographic inference profile may route to Osaka
+          // (ap-northeast-3) in addition to Tokyo (ap-northeast-1).
+          'arn:aws:bedrock:ap-northeast-3::foundation-model/anthropic.claude-sonnet-4-6',
           `arn:aws:bedrock:${this.region}:${account}:inference-profile/jp.anthropic.claude-sonnet-4-6`,
         ],
       }),

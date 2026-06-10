@@ -327,6 +327,9 @@ export class SharedInfraStack extends cdk.Stack {
           actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
           resources: [
             `arn:aws:bedrock:${this.region}::foundation-model/*`,
+            // The jp.* geographic inference profile may route to Osaka
+            // (ap-northeast-3) in addition to Tokyo (ap-northeast-1).
+            'arn:aws:bedrock:ap-northeast-3::foundation-model/*',
             `arn:aws:bedrock:${this.region}:${account}:inference-profile/*`,
           ],
         }),
