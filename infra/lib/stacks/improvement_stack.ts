@@ -76,8 +76,8 @@ export class ImprovementStack extends cdk.Stack {
     const improvementSuggestionsArn = `arn:aws:dynamodb:${this.region}:${account}:table/${improvementSuggestionsTableName}`;
     const customerHistoryArn = `arn:aws:dynamodb:${this.region}:${account}:table/${customerHistoryTableName}`;
     const connectInstanceArn = `arn:aws:connect:${this.region}:${account}:instance/${connectInstanceId}`;
-    const sonnetModelArn = `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-sonnet-4-6-20250514-v1:0`;
-    const sonnetInferenceProfileArn = `arn:aws:bedrock:${this.region}:${account}:inference-profile/jp.anthropic.claude-sonnet-4-6-20250514-v1:0`;
+    const sonnetModelArn = `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-sonnet-4-6`;
+    const sonnetInferenceProfileArn = `arn:aws:bedrock:${this.region}:${account}:inference-profile/jp.anthropic.claude-sonnet-4-6`;
 
     const code = lambda.Code.fromAsset('..', {
       exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],

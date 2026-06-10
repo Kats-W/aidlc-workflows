@@ -29,8 +29,9 @@ EMBED_MODEL_ID: str = "amazon.titan-embed-text-v2:0"
 #: Claude Sonnet 4.6 JP geographic inference profile (used for RAG answer
 #: generation, U-03). ap-northeast-1 does not support on-demand invocation of
 #: the bare foundation-model id for this model; the jp.* inference profile
-#: (routes to Tokyo/Osaka) must be used instead.
-ANSWER_MODEL_ID: str = "jp.anthropic.claude-sonnet-4-6-20250514-v1:0"
+#: (routes to Tokyo/Osaka) must be used instead. Unlike earlier Claude models,
+#: Sonnet 4.6 dropped the date/version suffix (no "-20250514-v1:0").
+ANSWER_MODEL_ID: str = "jp.anthropic.claude-sonnet-4-6"
 #: Anthropic Messages API version required by Bedrock.
 ANTHROPIC_VERSION: str = "bedrock-2023-05-31"
 #: Output embedding dimensionality.
@@ -77,10 +78,12 @@ class BedrockClient:
                     body=payload,
                 )
             except ClientError as exc:
-                code = exc.response.get("Error", {}).get("Code", "")
+                error = exc.response.get("Error", {})
+                code = error.get("Code", "")
+                detail = error.get("Message", "")
                 if code in _THROTTLE_CODES:
                     raise BedrockThrottledError(f"Bedrock throttled embed: {code}") from exc
-                raise EmbeddingError(f"Bedrock embed failed: {code}") from exc
+                raise EmbeddingError(f"Bedrock embed failed: {code}: {detail}") from exc
 
             try:
                 body = json.loads(response["body"].read())
@@ -142,12 +145,16 @@ class BedrockClient:
                     body=payload,
                 )
             except ClientError as exc:
-                code = exc.response.get("Error", {}).get("Code", "")
+                error = exc.response.get("Error", {})
+                code = error.get("Code", "")
+                detail = error.get("Message", "")
                 if code in _THROTTLE_CODES:
                     raise BedrockThrottledError(
                         f"Bedrock throttled generate_answer: {code}"
                     ) from exc
-                raise BedrockError(f"Bedrock generate_answer failed: {code}") from exc
+                raise BedrockError(
+                    f"Bedrock generate_answer failed: {code}: {detail}"
+                ) from exc
 
             try:
                 body = json.loads(response["body"].read())
@@ -204,13 +211,15 @@ class BedrockClient:
                     body=payload,
                 )
             except ClientError as exc:
-                code = exc.response.get("Error", {}).get("Code", "")
+                error = exc.response.get("Error", {})
+                code = error.get("Code", "")
+                detail = error.get("Message", "")
                 if code in _THROTTLE_CODES:
                     raise BedrockThrottledError(
                         f"Bedrock throttled generate_suggestion: {code}"
                     ) from exc
                 raise BedrockError(
-                    f"Bedrock generate_suggestion failed: {code}"
+                    f"Bedrock generate_suggestion failed: {code}: {detail}"
                 ) from exc
 
             try:
@@ -271,12 +280,16 @@ class BedrockClient:
                     body=payload,
                 )
             except ClientError as exc:
-                code = exc.response.get("Error", {}).get("Code", "")
+                error = exc.response.get("Error", {})
+                code = error.get("Code", "")
+                detail = error.get("Message", "")
                 if code in _THROTTLE_CODES:
                     raise BedrockThrottledError(
                         f"Bedrock throttled analyze_gap: {code}"
                     ) from exc
-                raise BedrockError(f"Bedrock analyze_gap failed: {code}") from exc
+                raise BedrockError(
+                    f"Bedrock analyze_gap failed: {code}: {detail}"
+                ) from exc
 
             try:
                 body = json.loads(response["body"].read())
