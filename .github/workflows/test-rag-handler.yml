@@ -1,0 +1,51 @@
+name: Test RAG Handler
+
+on:
+  workflow_dispatch:
+    inputs:
+      question:
+        description: 'User question to send to RagHandlerLambda (Japanese)'
+        required: true
+        default: 'auじぶん銀行の口座開設に必要なものを教えてください'
+      customerId:
+        description: 'Customer ID (use "anonymous" for unauthenticated test)'
+        required: false
+        default: 'anonymous'
+
+permissions: {}
+
+jobs:
+  invoke:
+    name: Invoke RagHandlerLambda directly
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-1
+      - name: Invoke RagHandlerLambda
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg userInput "${{ inputs.question }}" \
+            --arg customerId "${{ inputs.customerId }}" \
+            --arg contactId "manual-e2e-test-$(date +%s)" \
+            '{userInput: $userInput, customerId: $customerId, channel: "voice", contactId: $contactId}')
+
+          echo "Payload: $PAYLOAD"
+          echo ""
+
+          aws lambda invoke \
+            --function-name au-jibun-bank-dev-rag-handler \
+            --cli-binary-format raw-in-base64-out \
+            --payload "$PAYLOAD" \
+            --log-type Tail \
+            --query 'LogResult' \
+            --output text \
+            response.json | base64 -d
+
+          echo ""
+          echo "----- Response -----"
+          cat response.json | jq .
