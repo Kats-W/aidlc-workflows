@@ -138,6 +138,7 @@ export class ConversationStack extends cdk.Stack {
         resources: [
           `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
           `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-sonnet-4-6-20250514-v1:0`,
+          `arn:aws:bedrock:${this.region}:${account}:inference-profile/jp.anthropic.claude-sonnet-4-6-20250514-v1:0`,
         ],
       }),
     );

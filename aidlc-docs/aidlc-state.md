@@ -102,7 +102,36 @@
       - 既知の制約: 初回デプロイ直後は vector-cache が未構築のため scan_all() に
         フォールバック（従来どおり）。次回クロール/embedder実行後にキャッシュが
         構築され、以降のRagHandler呼び出しでDynamoDB scanを回避できる
-- [ ] PR マージ後、クロール/embedder を1回実行して vector-cache を構築 →
-      test-rag-handler.yml 再実行で pipeline step timing ログから search ステップの
-      短縮を確認 / hit:true / answer / sources 確認
+- [x] PR #40/#41 マージ・デプロイ後、Run Embedder（run 27266880118）正常完了 →
+      test-rag-handler.yml 再実行（run 27266934359）で vector-cache 有効化を確認:
+      "vector cache loaded from s3"（rows:350）、search complete（hits:5、
+      elapsed_ms:598、従来は予算超過でタイムアウトしていた箇所）。
+      S3プリビルドベクトルキャッシュの恒久対応は本番で正常動作と確認
+- [x] 上記再実行で新規バグ発見: search 後の generate_answer で
+      BEDROCK_ERROR ValidationException → hit:false（依然として）。
+      原因特定: ap-northeast-1 では Claude Sonnet 4.6 の on-demand invoke_model に
+      bare な foundation-model ID（anthropic.claude-sonnet-4-6-20250514-v1:0）が
+      使用不可。JP geographic inference profile
+      （jp.anthropic.claude-sonnet-4-6-20250514-v1:0、東京/大阪にルーティング）の
+      指定が必要（WebSearch で確認、AWS docs MCP 不使用時のため優先度2の情報源）
+- [x] generate_answer モデルID修正:
+      - src/common/bedrock_client.py: ANSWER_MODEL_ID を
+        "anthropic.claude-sonnet-4-6-20250514-v1:0" →
+        "jp.anthropic.claude-sonnet-4-6-20250514-v1:0" に変更
+        （generate_answer / generate_suggestion / analyze_gap 全てに適用）
+      - IAM: inference profile 呼び出しには foundation-model ARN と
+        inference-profile ARN の両方への bedrock:InvokeModel 許可が必要
+        - shared_infra_stack.ts: Lambda permission boundary の BedrockInvoke に
+          inference-profile/* を追加
+        - conversation_stack.ts: ragRole の BedrockEmbedAndAnswer に
+          inference-profile/jp.anthropic.claude-sonnet-4-6-20250514-v1:0 を追加
+        - improvement_stack.ts: suggestionRole / gapRole の
+          BedrockSuggestion / BedrockGapAnalysis に同 inference-profile ARN を追加
+      - 品質ゲート確認済み: ruff check（pass）/ mypy src tests（pass）/
+        pytest tests/unit -q（330 passed、test_channel_switch.py の
+        既知無関係failure 1件のみ）/ npx tsc --noEmit（pass）/
+        npx cdk synth --context env=dev（全7スタック成功）
+- [ ] PRマージ後、cdk-deploy-dev 完了を確認 → test-rag-handler.yml 再実行で
+      hit:true / answer / sources 確認、BEDROCK_ERROR/ValidationException が
+      解消されたことを確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
