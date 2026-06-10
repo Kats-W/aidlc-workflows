@@ -221,8 +221,9 @@
         pytest tests/unit -q（330 passed、test_channel_switch.py の
         既知無関係failure 1件のみ）/ npx tsc --noEmit（pass）/
         npx cdk synth --context env=dev（全7スタック成功）
-- [ ] PRマージ後、ci.yml を main に対して workflow_dispatch で手動実行
-      （auto-merge は cdk-deploy-dev をトリガーしないため）→ cdk-deploy-dev完了後、
-      test-rag-handler.yml 再実行で hit:true / answer / sources 確認、
-      TIMEOUT_BUDGET_EXCEEDED が解消されたことを確認
+- [x] PR #45 マージ後、ci.yml を main に対して workflow_dispatch で手動実行 →
+      cdk-deploy-dev 完了。test-rag-handler.yml 再実行で hit:true / answer
+      確認。TIMEOUT_BUDGET_EXCEEDED 解消。Claude Haiku 4.5
+      （jp.anthropic.claude-haiku-4-5-20251001-v1:0）への切替によりRAG音声
+      パイプラインが8秒バジェット内で正常動作することを確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
