@@ -12,8 +12,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.common.errors import SearchError
+from src.common.errors import ObjectNotFoundError, S3AccessError, SearchError
 from src.vector_store.searcher import CACHE_META, CACHE_TS, CACHE_VECTORS, CosineSimilaritySearcher
+from src.vector_store.vector_cache_store import build_matrix_and_meta
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +32,16 @@ def _store_with(items: list[dict]) -> object:
     store = type("S", (), {})()
     store.scan_all = AsyncMock(return_value=items)  # type: ignore[attr-defined]
     return store
+
+
+def _cache_store_with(read_result: object) -> object:
+    """Build a fake :class:`VectorCacheS3Store` whose ``read`` returns or raises."""
+    cache_store = type("CS", (), {})()
+    if isinstance(read_result, BaseException):
+        cache_store.read = AsyncMock(side_effect=read_result)  # type: ignore[attr-defined]
+    else:
+        cache_store.read = AsyncMock(return_value=read_result)  # type: ignore[attr-defined]
+    return cache_store
 
 
 CORPUS = [
@@ -93,6 +104,40 @@ async def test_cache_ttl_expiry_refreshes() -> None:
         fh.write(str(time.time() - CosineSimilaritySearcher.CACHE_TTL_SECONDS - 1))
     store.scan_all.reset_mock()  # type: ignore[attr-defined]
     await s.search([1.0, 0.0, 0.0], top_k=1)
+    store.scan_all.assert_called_once()  # type: ignore[attr-defined]
+
+
+async def test_s3_cache_hit_skips_dynamo_scan() -> None:
+    matrix, meta = build_matrix_and_meta(CORPUS)
+    store = _store_with(CORPUS)
+    cache_store = _cache_store_with((matrix, meta))
+    s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    hits = await s.search([1.0, 0.0, 0.0], top_k=1)
+    assert hits[0].chunk_id == "a"
+    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
+    store.scan_all.assert_not_called()  # type: ignore[attr-defined]
+    # The S3-sourced corpus is persisted to /tmp for subsequent invocations.
+    assert os.path.exists(CACHE_VECTORS)
+    assert os.path.exists(CACHE_META)
+
+
+async def test_s3_cache_missing_falls_back_to_scan() -> None:
+    store = _store_with(CORPUS)
+    cache_store = _cache_store_with(ObjectNotFoundError("not built yet"))
+    s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    hits = await s.search([1.0, 0.0, 0.0], top_k=1)
+    assert hits[0].chunk_id == "a"
+    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
+    store.scan_all.assert_called_once()  # type: ignore[attr-defined]
+
+
+async def test_s3_cache_access_error_falls_back_to_scan() -> None:
+    store = _store_with(CORPUS)
+    cache_store = _cache_store_with(S3AccessError("boom"))
+    s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    hits = await s.search([1.0, 0.0, 0.0], top_k=1)
+    assert hits[0].chunk_id == "a"
+    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
     store.scan_all.assert_called_once()  # type: ignore[attr-defined]
 
 

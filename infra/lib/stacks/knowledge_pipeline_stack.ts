@@ -188,6 +188,14 @@ export class KnowledgePipelineStack extends cdk.Stack {
     );
     embedderRole.addToPolicy(
       new iam.PolicyStatement({
+        sid: 'VectorCacheWrite',
+        effect: iam.Effect.ALLOW,
+        actions: ['s3:PutObject'],
+        resources: [`${crawlBucketArn}/vector-cache/*`],
+      }),
+    );
+    embedderRole.addToPolicy(
+      new iam.PolicyStatement({
         sid: 'BedrockEmbed',
         effect: iam.Effect.ALLOW,
         actions: ['bedrock:InvokeModel'],

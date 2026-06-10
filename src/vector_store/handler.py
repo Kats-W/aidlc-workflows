@@ -15,9 +15,11 @@ from typing import Any
 from aws_lambda_powertools import Logger
 
 from src.common.bedrock_client import BedrockClient
+from src.common.errors import S3AccessError
 from src.crawler.parser import ContentChunk
 from src.crawler.s3_store import S3ContentStore
 from src.vector_store.store import VectorStore
+from src.vector_store.vector_cache_store import VectorCacheS3Store, build_matrix_and_meta
 
 logger = Logger()
 
@@ -65,6 +67,14 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     for chunk_id in deletes:
         await vector_store.delete(chunk_id)
+
+    if bucket and (upserted or deletes):
+        try:
+            items = await vector_store.scan_all()
+            matrix, meta = build_matrix_and_meta(items)
+            await VectorCacheS3Store(bucket=bucket).write(matrix, meta)
+        except S3AccessError as exc:
+            logger.warning("vector cache rebuild failed", extra={"error": str(exc)})
 
     summary = {"upserted": upserted, "deleted": len(deletes)}
     logger.info("embedder finished", extra=summary)

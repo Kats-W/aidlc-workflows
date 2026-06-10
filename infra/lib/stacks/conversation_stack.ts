@@ -48,6 +48,7 @@ export class ConversationStack extends cdk.Stack {
 
     const vectorStoreTableName = p(`${base}/dynamodb/vector-store-table-name`);
     const customerHistoryTableName = p(`${base}/dynamodb/customer-history-table-name`);
+    const crawlBucketName = p(`${base}/s3/crawl-content-bucket-name`);
     const cmkArn = p(`${base}/kms/cmk-arn`);
     const permBoundaryArn = p(`${base}/iam/lambda-permission-boundary-arn`);
     const escalationQueueArn = p(`${base}/connect/escalation-queue-arn`);
@@ -65,9 +66,10 @@ export class ConversationStack extends cdk.Stack {
       pythonDepsLayerArn,
     );
 
-    // ARNs reconstructed from names (SSM exports names, not ARNs, for tables).
+    // ARNs reconstructed from names (SSM exports names, not ARNs, for tables/bucket).
     const vectorStoreArn = `arn:aws:dynamodb:${this.region}:${account}:table/${vectorStoreTableName}`;
     const customerHistoryArn = `arn:aws:dynamodb:${this.region}:${account}:table/${customerHistoryTableName}`;
+    const crawlBucketArn = `arn:aws:s3:::${crawlBucketName}`;
 
     // -----------------------------------------------------------------------
     // 2. Shared environment.
@@ -75,6 +77,7 @@ export class ConversationStack extends cdk.Stack {
     const commonEnv: Record<string, string> = {
       VECTOR_STORE_TABLE_NAME: vectorStoreTableName,
       CUSTOMER_HISTORY_TABLE_NAME: customerHistoryTableName,
+      CRAWL_CONTENT_BUCKET: crawlBucketName,
       POWERTOOLS_SERVICE_NAME: 'u-03-conversation-engine',
       LOG_LEVEL: 'INFO',
     };
@@ -109,6 +112,14 @@ export class ConversationStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
         resources: [vectorStoreArn, `${vectorStoreArn}/index/*`],
+      }),
+    );
+    ragRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'VectorCacheRead',
+        effect: iam.Effect.ALLOW,
+        actions: ['s3:GetObject'],
+        resources: [`${crawlBucketArn}/vector-cache/*`],
       }),
     );
     ragRole.addToPolicy(

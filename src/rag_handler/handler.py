@@ -17,6 +17,7 @@ returns a safe fallback response with ``hit=False`` (it never raises to Connect)
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -30,6 +31,7 @@ from src.rag_handler.personalizer import Personalizer
 from src.session_manager.history import ConversationTurn, HistoryRepository
 from src.vector_store.searcher import CosineSimilaritySearcher, SearchHit
 from src.vector_store.store import VectorStore
+from src.vector_store.vector_cache_store import VectorCacheS3Store
 
 logger = Logger()
 
@@ -57,11 +59,13 @@ def _build_dependencies() -> tuple[
 ]:
     """Construct the live pipeline collaborators (patched out in tests)."""
     history = HistoryRepository()
+    bucket = os.environ.get("CRAWL_CONTENT_BUCKET")
+    cache_store = VectorCacheS3Store(bucket=bucket) if bucket else None
     return (
         PiiMasker(),
         Personalizer(history),
         BedrockClient(),
-        CosineSimilaritySearcher(VectorStore()),
+        CosineSimilaritySearcher(VectorStore(), cache_store),
         history,
     )
 
