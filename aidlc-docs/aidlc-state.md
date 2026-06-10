@@ -189,9 +189,40 @@
       AWS には未デプロイの状態だった
       （PR #43 は merged_by: Kats-W で人間が手動マージしたため正常に
       cdk-deploy-dev がトリガーされていた、との対比で確認）
-- [ ] ci.yml を main ブランチに対して workflow_dispatch で手動実行し、
-      cdk-deploy-dev で PR #44 のIAM修正（ap-northeast-3 foundation-model
-      InvokeModel許可）をデプロイ → 完了後、test-rag-handler.yml 再実行で
-      hit:true / answer / sources 確認、AccessDeniedException が
-      解消されたことを確認
+- [x] ユーザーが ci.yml を main ブランチに対して workflow_dispatch で手動実行
+      （run 27284242222、commit 82dac306、14:41:54Z〜14:54:08Z）→
+      cdk-deploy-dev 完了。直後の test-rag-handler.yml 再実行（run 27285045699）で
+      AccessDeniedException は解消（embed: 268ms, search: 669ms, hits:5、
+      BEDROCK_ERRORなし）。PR #42-44 のIAM/モデルID修正は正しく機能していることを確認
+- [x] 上記再実行で新規発見: generate_answer（Claude Sonnet 4.6, jp.* 推論
+      プロファイル, max_tokens=400）が完了せず、6秒パイプラインバジェットで
+      `TIMEOUT_BUDGET_EXCEEDED` → hit:false。
+      Lambda総Duration 6841ms + Init(コールドスタート) 1571ms = 8413ms で
+      Connect のハード上限 8秒も超過するリスクあり。
+      → Sonnet 4.6 の応答生成速度は音声チャネルの8秒制約に対して根本的に厳しい
+      （ユーザーと協議の結果、generate_answer のみ高速モデルに切替する方針に決定）
+- [x] generate_answer を Claude Haiku 4.5 JP geo推論プロファイルに切替
+      （WebSearchで確認: モデルID `anthropic.claude-haiku-4-5-20251001-v1:0`、
+      JP推論プロファイル `jp.anthropic.claude-haiku-4-5-20251001-v1:0`、
+      東京(ap-northeast-1)/大阪(ap-northeast-3)の国内リージョンに限定。
+      Haiku 4.5 はSonnet 4.6と異なり `-20251001-v1:0` サフィックスを保持）
+      - src/common/bedrock_client.py: 新規定数
+        `RAG_ANSWER_MODEL_ID = "jp.anthropic.claude-haiku-4-5-20251001-v1:0"`
+        を追加し、generate_answer はこちらを使用。
+        `ANSWER_MODEL_ID`（Sonnet 4.6）は generate_suggestion / analyze_gap
+        （U-06、レイテンシ制約なし）専用として継続使用
+      - conversation_stack.ts: ragRole の BedrockEmbedAndAnswer を
+        Sonnet 4.6 ARN群 → Haiku 4.5 ARN群（東京/大阪 foundation-model +
+        inference-profile）に置き換え（embed は引き続き Titan のみ）
+      - improvement_stack.ts / shared_infra_stack.ts: 変更なし
+        （boundary は foundation-model/* ワイルドカードで Haiku もカバー済み、
+        suggestionRole/gapRole は引き続き Sonnet 4.6 を使用）
+      - 品質ゲート確認済み: ruff check（pass）/ mypy src tests（pass）/
+        pytest tests/unit -q（330 passed、test_channel_switch.py の
+        既知無関係failure 1件のみ）/ npx tsc --noEmit（pass）/
+        npx cdk synth --context env=dev（全7スタック成功）
+- [ ] PRマージ後、ci.yml を main に対して workflow_dispatch で手動実行
+      （auto-merge は cdk-deploy-dev をトリガーしないため）→ cdk-deploy-dev完了後、
+      test-rag-handler.yml 再実行で hit:true / answer / sources 確認、
+      TIMEOUT_BUDGET_EXCEEDED が解消されたことを確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
