@@ -18,8 +18,9 @@ from typing import Any
 import numpy as np
 from aws_lambda_powertools import Logger
 
-from src.common.errors import SearchError
+from src.common.errors import ObjectNotFoundError, S3AccessError, SearchError
 from src.vector_store.store import VectorStore
+from src.vector_store.vector_cache_store import VectorCacheS3Store, build_matrix_and_meta
 
 logger = Logger()
 
@@ -51,8 +52,9 @@ class CosineSimilaritySearcher:
 
     CACHE_TTL_SECONDS: int = 900  # 15 minutes
 
-    def __init__(self, store: VectorStore) -> None:
+    def __init__(self, store: VectorStore, cache_store: VectorCacheS3Store | None = None) -> None:
         self._store = store
+        self._cache_store = cache_store
 
     async def search(self, query_vec: list[float], top_k: int = 5) -> list[SearchHit]:
         """Return the ``top_k`` most cosine-similar chunks to ``query_vec``.
@@ -88,7 +90,7 @@ class CosineSimilaritySearcher:
         return hits
 
     async def _load_vectors(self) -> tuple[np.ndarray, list[dict[str, Any]]]:
-        """Load the corpus from /tmp cache when valid, else from DynamoDB."""
+        """Load the corpus from /tmp cache when valid, else S3, else DynamoDB."""
         if self._is_cache_valid():
             try:
                 matrix = np.load(CACHE_VECTORS)
@@ -99,15 +101,22 @@ class CosineSimilaritySearcher:
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 logger.warning("vector cache load failed, refreshing", extra={"error": str(exc)})
 
+        if self._cache_store is not None:
+            try:
+                matrix, meta = await self._cache_store.read()
+                logger.info("vector cache loaded from s3", extra={"rows": len(meta)})
+                self._write_cache(matrix, meta)
+                return matrix, meta
+            except ObjectNotFoundError:
+                logger.info("s3 vector cache not found, falling back to full scan")
+            except S3AccessError as exc:
+                logger.warning(
+                    "s3 vector cache read failed, falling back to full scan",
+                    extra={"error": str(exc)},
+                )
+
         items = await self._store.scan_all()
-        meta = [
-            {"chunkId": it["chunkId"], "sourceUrl": it["sourceUrl"], "text": it["text"]}
-            for it in items
-        ]
-        if items:
-            matrix = np.asarray([it["embedding"] for it in items], dtype=np.float64)
-        else:
-            matrix = np.empty((0, 0), dtype=np.float64)
+        matrix, meta = build_matrix_and_meta(items)
         self._write_cache(matrix, meta)
         return matrix, meta
 

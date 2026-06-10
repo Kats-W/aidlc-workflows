@@ -80,6 +80,29 @@
       generate_answer/history_append）の所要時間ログ追加 + RAG回答 max_tokens を
       1024→400 に短縮（ANSWER_MAX_TOKENS、Claude生成時間短縮 + 音声TTS向け簡潔化）
 - [ ] 電話番号 +1 825-395-4670 接続不可問題（AWS サポートケース対応中、並行進行）
-- [ ] PR #39 マージ後、test-rag-handler.yml 再実行で pipeline step timing ログから
-      ボトルネック特定 / hit:true / answer / sources 確認
+- [x] PR #39 マージ後、test-rag-handler.yml 再実行で pipeline step timing ログを確認:
+      mask/personalize/embed 完了後、search ステップで予算超過（generate_answer 未到達）。
+      原因特定: CosineSimilaritySearcher が cold start 時に VectorStore.scan_all()
+      （DynamoDB 全件スキャン、PAY_PER_REQUEST・1024次元埋め込み・~1MB/ページ）を実行しており、
+      6秒予算の残り時間（mask/personalize/embed後で約5.7秒）を超過していた
+- [x] 恒久対応（S3プリビルドベクトルキャッシュ）実装:
+      - src/vector_store/vector_cache_store.py 新規追加（VectorCacheS3Store: 結合済み
+        embedding行列(.npy) + メタデータ(JSON) を crawlBucket の vector-cache/ 配下に保存・読込、
+        build_matrix_and_meta ヘルパー）
+      - EmbedderLambda (src/vector_store/handler.py): upsert/delete 適用後にVectorStore全件を
+        再スキャンし vector-cache を再構築（S3書き込み失敗時はログのみ、ハンドラは失敗させない）
+      - RagHandlerLambda の CosineSimilaritySearcher (src/vector_store/searcher.py):
+        /tmp キャッシュ未生成時、まずS3 vector-cacheを読み込み（ヒット時はDynamoDB scanをスキップ）。
+        ObjectNotFoundError（未構築）/ S3AccessError 時は従来の scan_all() にフォールバック
+      - CDK: KnowledgePipelineStack に embedderRole 用 VectorCacheWrite (s3:PutObject)、
+        ConversationStack に ragRole 用 VectorCacheRead (s3:GetObject)、
+        CRAWL_CONTENT_BUCKET 環境変数を追加
+      - テスト追加: test_vector_cache_store.py（4件）、test_searcher.py に S3キャッシュ
+        ヒット/未構築/アクセスエラーのフォールバック3件、test_handler.py（embedder）新規4件
+      - 既知の制約: 初回デプロイ直後は vector-cache が未構築のため scan_all() に
+        フォールバック（従来どおり）。次回クロール/embedder実行後にキャッシュが
+        構築され、以降のRagHandler呼び出しでDynamoDB scanを回避できる
+- [ ] PR マージ後、クロール/embedder を1回実行して vector-cache を構築 →
+      test-rag-handler.yml 再実行で pipeline step timing ログから search ステップの
+      短縮を確認 / hit:true / answer / sources 確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
