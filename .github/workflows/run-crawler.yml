@@ -1,0 +1,32 @@
+name: Run Crawler
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  invoke:
+    name: Invoke CrawlerLambda (async)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-1
+      - name: Invoke CrawlerLambda asynchronously
+        # The crawler can run up to 15 minutes, so invoke async (Event) and
+        # check progress afterwards with the "Check Crawler Status" workflow.
+        run: |
+          aws lambda invoke \
+            --function-name au-jibun-bank-dev-crawler \
+            --invocation-type Event \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{}' \
+            response.json
+
+          echo "CrawlerLambda invoked asynchronously."
+          echo "Run the 'Check Crawler Status' workflow in a few minutes to see the crawl summary."
