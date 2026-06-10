@@ -25,15 +25,14 @@ def _fake_comprehend(entities: list[dict[str, Any]]) -> MagicMock:
 
 
 async def test_mask_replaces_detected_pii() -> None:
-    text = "私の名前は山田太郎です"
-    # byte offsets for "山田太郎": prefix "私の名前は" is 5 chars * 3 bytes = 15.
-    begin = len("私の名前は".encode())
-    end = begin + len("山田太郎".encode())
+    text = "my name is John Smith"
+    begin = len("my name is ")
+    end = begin + len("John Smith")
     masker = PiiMasker(client=_fake_comprehend([_entity(begin, end)]))
 
-    masked, entities = await masker.mask(text)
+    masked, entities = await masker.mask(text, lang="en")
 
-    assert "山田太郎" not in masked
+    assert "John Smith" not in masked
     assert MASK_TOKEN in masked
     assert masker.contains_pii(entities) is True
 
@@ -44,6 +43,17 @@ async def test_mask_passthrough_when_no_pii() -> None:
     assert masked == "残高を教えてください"
     assert entities == []
     assert masker.contains_pii(entities) is False
+
+
+async def test_mask_japanese_does_not_call_comprehend() -> None:
+    """Comprehend's DetectPiiEntities does not support ``ja`` (ValidationException)."""
+    client = _fake_comprehend([])
+    masker = PiiMasker(client=client)
+    masked, entities = await masker.mask("090-1234-5678に電話してください")
+    client.detect_pii_entities.assert_not_called()
+    assert "090-1234-5678" not in masked
+    assert MASK_TOKEN in masked
+    assert masker.contains_pii(entities) is True
 
 
 async def test_mask_empty_input_short_circuits() -> None:
@@ -61,13 +71,13 @@ async def test_mask_wraps_client_error() -> None:
     )
     masker = PiiMasker(client=client)
     with pytest.raises(ComprehendError):
-        await masker.mask("some text")
+        await masker.mask("some text", lang="en")
 
 
 @given(
-    prefix=st.text(alphabet="あいうえおABC ", max_size=20),
+    prefix=st.text(alphabet="abcdefg ", max_size=20),
     pii=st.text(alphabet="XYZ0123456789", min_size=1, max_size=12),
-    suffix=st.text(alphabet="かきくけこ ", max_size=20),
+    suffix=st.text(alphabet="hijklmn ", max_size=20),
 )
 async def test_masked_text_never_contains_pii(
     prefix: str, pii: str, suffix: str
@@ -78,7 +88,7 @@ async def test_masked_text_never_contains_pii(
     end = begin + len(pii.encode())
     masker = PiiMasker(client=_fake_comprehend([_entity(begin, end)]))
 
-    masked, _ = await masker.mask(text)
+    masked, _ = await masker.mask(text, lang="en")
 
     if pii not in prefix and pii not in suffix:
         assert pii not in masked

@@ -4,6 +4,12 @@
 replaces every detected span with the literal ``[MASKED]`` token. All text that
 flows into logs, vector search, the LLM prompt, or persisted conversation
 history MUST first pass through :meth:`PiiMasker.mask` (U-03 business rule).
+
+Comprehend's ``DetectPiiEntities`` only supports ``LanguageCode`` values ``en``
+and ``es``; calling it with ``ja`` raises ``ValidationException``. Japanese
+input (the default and primary language for this agent) is therefore masked via
+:func:`src.common.ja_pii_patterns.mask_japanese_pii` instead, without ever
+calling Comprehend.
 """
 
 from __future__ import annotations
@@ -16,16 +22,17 @@ from aws_lambda_powertools import Logger
 from botocore.exceptions import ClientError
 
 from src.common.errors import ComprehendError
+from src.common.ja_pii_patterns import MASK_TOKEN, mask_japanese_pii
 
 if TYPE_CHECKING:
     from mypy_boto3_comprehend.literals import LanguageCodeType
 
 logger = Logger()
 
-#: Replacement token written in place of every detected PII span.
-MASK_TOKEN: str = "[MASKED]"
 #: Comprehend caps DetectPiiEntities at 100 KB of UTF-8 bytes per request.
 _MAX_BYTES: int = 100_000
+
+__all__ = ["MASK_TOKEN", "PiiMasker"]
 
 
 class PiiMasker:
@@ -42,21 +49,32 @@ class PiiMasker:
     async def mask(
         self, text: str, lang: str = "ja"
     ) -> tuple[str, list[dict[str, Any]]]:
-        """Mask every PII entity Comprehend detects in ``text``.
+        """Mask PII spans detected in ``text``.
 
         Args:
             text: Raw input that may contain PII.
-            lang: Comprehend language code (default ``"ja"``).
+            lang: Language code (default ``"ja"``). ``"ja"`` is masked via
+                regex patterns (see module docstring); any other value is
+                passed to Comprehend ``DetectPiiEntities`` as ``LanguageCode``.
 
         Returns:
-            ``(masked_text, detected_entities)`` where ``detected_entities`` is
-            the raw list of Comprehend entity dicts (offsets/type/score).
+            ``(masked_text, detected_entities)``. For non-``"ja"`` input,
+            ``detected_entities`` is the raw list of Comprehend entity dicts
+            (byte offsets/type/score); for ``"ja"`` input it mirrors that shape
+            using character offsets (see :func:`mask_japanese_pii`).
 
         Raises:
-            ComprehendError: If the Comprehend call fails.
+            ComprehendError: If the Comprehend call fails (non-``"ja"`` only).
         """
         if not text or not text.strip():
             return text, []
+
+        if lang == "ja":
+            # Comprehend's DetectPiiEntities does not support ja (ValidationException);
+            # mask Japanese input via regex patterns instead.
+            masked, entities = mask_japanese_pii(text)
+            logger.info("pii masked", extra={"entities": len(entities), "method": "regex"})
+            return masked, entities
 
         # Comprehend offsets are byte-based; guard the request-size limit.
         if len(text.encode("utf-8")) > _MAX_BYTES:
