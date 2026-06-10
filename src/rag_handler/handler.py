@@ -7,7 +7,7 @@ The pipeline, bounded by a 6-second time budget (well inside Connect's 8s limit)
 2. build personalization context from prior turns,
 3. embed the masked input (Titan v2),
 4. cosine-search the vector store for the top-k chunks,
-5. generate an answer with Claude Sonnet 4.6,
+5. generate an answer with Claude Haiku 4.5,
 6. append the user + assistant turns to CustomerHistory.
 
 If the pipeline exceeds its time budget, or Bedrock/Comprehend fail, the handler

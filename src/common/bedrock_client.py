@@ -26,12 +26,20 @@ logger = Logger()
 
 #: Titan Text Embeddings v2 model id.
 EMBED_MODEL_ID: str = "amazon.titan-embed-text-v2:0"
-#: Claude Sonnet 4.6 JP geographic inference profile (used for RAG answer
-#: generation, U-03). ap-northeast-1 does not support on-demand invocation of
-#: the bare foundation-model id for this model; the jp.* inference profile
+#: Claude Sonnet 4.6 JP geographic inference profile (used for the
+#: latency-insensitive background generation in U-06: generate_suggestion,
+#: analyze_gap). ap-northeast-1 does not support on-demand invocation of the
+#: bare foundation-model id for this model; the jp.* inference profile
 #: (routes to Tokyo/Osaka) must be used instead. Unlike earlier Claude models,
 #: Sonnet 4.6 dropped the date/version suffix (no "-20250514-v1:0").
 ANSWER_MODEL_ID: str = "jp.anthropic.claude-sonnet-4-6"
+#: Claude Haiku 4.5 JP geographic inference profile (used for the
+#: voice/chat RAG answer in U-03: generate_answer). Sonnet 4.6 was too slow
+#: to reliably finish within Amazon Connect's 8s Lambda budget; Haiku 4.5
+#: trades some answer quality for the latency headroom this path needs.
+#: Like earlier Claude models (and unlike Sonnet 4.6), Haiku 4.5 keeps the
+#: "-20251001-v1:0" date/version suffix.
+RAG_ANSWER_MODEL_ID: str = "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
 #: Anthropic Messages API version required by Bedrock.
 ANTHROPIC_VERSION: str = "bedrock-2023-05-31"
 #: Output embedding dimensionality.
@@ -106,7 +114,7 @@ class BedrockClient:
         history_text: str,
         max_tokens: int = 1024,
     ) -> tuple[str, list[str]]:
-        """Generate a RAG answer with Claude Sonnet 4.6 over the retrieved context.
+        """Generate a RAG answer with Claude Haiku 4.5 over the retrieved context.
 
         Args:
             query: The (PII-masked) customer question.
@@ -139,7 +147,7 @@ class BedrockClient:
         def _invoke() -> str:
             try:
                 response = self._client.invoke_model(
-                    modelId=ANSWER_MODEL_ID,
+                    modelId=RAG_ANSWER_MODEL_ID,
                     accept="application/json",
                     contentType="application/json",
                     body=payload,
