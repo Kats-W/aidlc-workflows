@@ -26,8 +26,11 @@ logger = Logger()
 
 #: Titan Text Embeddings v2 model id.
 EMBED_MODEL_ID: str = "amazon.titan-embed-text-v2:0"
-#: Claude Sonnet 4.6 model id (used for RAG answer generation, U-03).
-ANSWER_MODEL_ID: str = "anthropic.claude-sonnet-4-6-20250514-v1:0"
+#: Claude Sonnet 4.6 JP geographic inference profile (used for RAG answer
+#: generation, U-03). ap-northeast-1 does not support on-demand invocation of
+#: the bare foundation-model id for this model; the jp.* inference profile
+#: (routes to Tokyo/Osaka) must be used instead.
+ANSWER_MODEL_ID: str = "jp.anthropic.claude-sonnet-4-6-20250514-v1:0"
 #: Anthropic Messages API version required by Bedrock.
 ANTHROPIC_VERSION: str = "bedrock-2023-05-31"
 #: Output embedding dimensionality.

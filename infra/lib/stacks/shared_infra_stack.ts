@@ -325,7 +325,10 @@ export class SharedInfraStack extends cdk.Stack {
           sid: 'BedrockInvoke',
           effect: iam.Effect.ALLOW,
           actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-          resources: [`arn:aws:bedrock:${this.region}::foundation-model/*`],
+          resources: [
+            `arn:aws:bedrock:${this.region}::foundation-model/*`,
+            `arn:aws:bedrock:${this.region}:${account}:inference-profile/*`,
+          ],
         }),
         new iam.PolicyStatement({
           sid: 'ComprehendDetect',
