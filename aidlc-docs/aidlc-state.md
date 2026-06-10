@@ -157,4 +157,26 @@
 - [ ] PRマージ後、cdk-deploy-dev 完了を確認 → test-rag-handler.yml 再実行で
       hit:true / answer / sources 確認、BEDROCK_ERROR/ValidationException が
       解消されたことを確認（再発時は詳細診断ログの detail フィールドを確認）
+- [x] PR #43 マージ・デプロイ後、test-rag-handler.yml 再実行（run 27280928457）:
+      モデルID修正（サフィックスなし）は有効で ValidationException は解消。
+      新規エラー: BEDROCK_ERROR AccessDeniedException → hit:false（依然として）。
+      診断ログ（detail フィールド）に具体的な原因が出力された:
+      "...is not authorized to perform: bedrock:InvokeModel on resource:
+       arn:aws:bedrock:ap-northeast-3::foundation-model/anthropic.claude-sonnet-4-6..."
+      → jp.* geographic inference profile は東京(ap-northeast-1)だけでなく
+      大阪(ap-northeast-3)にもルーティングされうるため、呼び出し元IAMロールには
+      両リージョンの foundation-model ARN への bedrock:InvokeModel 許可が必要
+      （WebSearch で確認: Geographic cross-Region inference は宛先リージョンを
+      明示的に列挙する必要がある）
+- [x] IAM修正: ap-northeast-3 の foundation-model ARN を追加
+      - shared_infra_stack.ts: Lambda permission boundary の BedrockInvoke に
+        `arn:aws:bedrock:ap-northeast-3::foundation-model/*` を追加
+      - conversation_stack.ts: ragRole の BedrockEmbedAndAnswer に
+        `arn:aws:bedrock:ap-northeast-3::foundation-model/anthropic.claude-sonnet-4-6` を追加
+      - improvement_stack.ts: suggestionRole / gapRole の
+        BedrockSuggestion / BedrockGapAnalysis に同ARNを追加
+      - 品質ゲート確認済み: npx tsc --noEmit（pass）/
+        npx cdk synth --context env=dev（全7スタック成功）
+- [ ] PRマージ後、cdk-deploy-dev 完了を確認 → test-rag-handler.yml 再実行で
+      hit:true / answer / sources 確認、AccessDeniedException が解消されたことを確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）

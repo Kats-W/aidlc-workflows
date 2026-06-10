@@ -77,6 +77,10 @@ export class ImprovementStack extends cdk.Stack {
     const customerHistoryArn = `arn:aws:dynamodb:${this.region}:${account}:table/${customerHistoryTableName}`;
     const connectInstanceArn = `arn:aws:connect:${this.region}:${account}:instance/${connectInstanceId}`;
     const sonnetModelArn = `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-sonnet-4-6`;
+    // The jp.* geographic inference profile may route to Osaka
+    // (ap-northeast-3) in addition to Tokyo (ap-northeast-1).
+    const sonnetModelArnOsaka =
+      'arn:aws:bedrock:ap-northeast-3::foundation-model/anthropic.claude-sonnet-4-6';
     const sonnetInferenceProfileArn = `arn:aws:bedrock:${this.region}:${account}:inference-profile/jp.anthropic.claude-sonnet-4-6`;
 
     const code = lambda.Code.fromAsset('..', {
@@ -126,7 +130,7 @@ export class ImprovementStack extends cdk.Stack {
         sid: 'BedrockSuggestion',
         effect: iam.Effect.ALLOW,
         actions: ['bedrock:InvokeModel'],
-        resources: [sonnetModelArn, sonnetInferenceProfileArn],
+        resources: [sonnetModelArn, sonnetModelArnOsaka, sonnetInferenceProfileArn],
       }),
     );
     cmk.grantEncryptDecrypt(suggestionRole);
@@ -177,7 +181,7 @@ export class ImprovementStack extends cdk.Stack {
         sid: 'BedrockGapAnalysis',
         effect: iam.Effect.ALLOW,
         actions: ['bedrock:InvokeModel'],
-        resources: [sonnetModelArn, sonnetInferenceProfileArn],
+        resources: [sonnetModelArn, sonnetModelArnOsaka, sonnetInferenceProfileArn],
       }),
     );
     gapRole.addToPolicy(
