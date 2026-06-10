@@ -17,6 +17,7 @@ returns a safe fallback response with ``hit=False`` (it never raises to Connect)
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -38,6 +39,9 @@ PIPELINE_BUDGET_SECONDS: float = 6.0
 TOP_K: int = 5
 #: Minimum cosine score for a hit to count as a usable match.
 MIN_HIT_SCORE: float = 0.3
+#: Max tokens for the RAG answer. Kept short for voice-channel latency (the
+#: 6s pipeline budget) and TTS readability.
+ANSWER_MAX_TOKENS: int = 400
 #: Fallback message returned when the pipeline cannot produce an answer.
 FALLBACK_ANSWER: str = (
     "申し訳ございません。ただいまお答えをご用意できませんでした。"
@@ -71,11 +75,27 @@ async def _rag_pipeline(
     """Run the full RAG pipeline and return the Connect response payload."""
     masker, personalizer, bedrock, searcher, history = _build_dependencies()
 
+    step_start = time.monotonic()
+
+    def _log_step(step: str) -> None:
+        nonlocal step_start
+        now = time.monotonic()
+        elapsed_ms = round((now - step_start) * 1000)
+        logger.info(
+            "pipeline step timing",
+            extra={"contact_id": contact_id, "step": step, "elapsed_ms": elapsed_ms},
+        )
+        step_start = now
+
     masked_input, _entities = await masker.mask(user_input)
+    _log_step("mask")
     history_text = await personalizer.build_context(customer_id)
+    _log_step("personalize")
 
     query_vec = await bedrock.embed(masked_input)
+    _log_step("embed")
     hits: list[SearchHit] = await searcher.search(query_vec, top_k=TOP_K)
+    _log_step("search")
 
     usable = [h for h in hits if h.score >= MIN_HIT_SCORE]
     if not usable:
@@ -83,7 +103,10 @@ async def _rag_pipeline(
         return {"answer": FALLBACK_ANSWER, "sources": [], "hit": False}
 
     chunks = [{"text": h.text, "source_url": h.source_url} for h in usable]
-    answer, sources = await bedrock.generate_answer(masked_input, chunks, history_text)
+    answer, sources = await bedrock.generate_answer(
+        masked_input, chunks, history_text, max_tokens=ANSWER_MAX_TOKENS
+    )
+    _log_step("generate_answer")
 
     now = datetime.now(UTC).isoformat()
     await history.append_turn(
@@ -106,6 +129,7 @@ async def _rag_pipeline(
             channel=channel,
         ),
     )
+    _log_step("history_append")
     return {"answer": answer, "sources": sources, "hit": True}
 
 

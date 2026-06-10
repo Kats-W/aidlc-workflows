@@ -73,6 +73,13 @@
       フォールバックし、RAG パイプライン本体（embed/検索/Claude生成）が未実行だった
 - [x] PR #38: src/common/ja_pii_patterns.py 追加（電話番号・メール・郵便番号・カード番号・
       マイナンバーを正規表現でマスク）。lang="ja" は Comprehend を呼ばずこちらを使用（320 tests pass）
+- [x] PR #38 マージ後、test-rag-handler.yml 再実行: pii masked entities:0（PII修正は有効）だが
+      新規バグ TIMEOUT_BUDGET_EXCEEDED で hit:false（mask完了 03:41:16.601 → timeout 03:41:21.975、
+      search complete / generated answer のログなし。Lambda Duration 9.3s, Init 1.65s）
+- [x] PR #39: src/rag_handler/handler.py に各ステップ（mask/personalize/embed/search/
+      generate_answer/history_append）の所要時間ログ追加 + RAG回答 max_tokens を
+      1024→400 に短縮（ANSWER_MAX_TOKENS、Claude生成時間短縮 + 音声TTS向け簡潔化）
 - [ ] 電話番号 +1 825-395-4670 接続不可問題（AWS サポートケース対応中、並行進行）
-- [ ] PR #38 マージ後、test-rag-handler.yml 再実行で hit:true / answer / sources 確認
+- [ ] PR #39 マージ後、test-rag-handler.yml 再実行で pipeline step timing ログから
+      ボトルネック特定 / hit:true / answer / sources 確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
