@@ -155,6 +155,17 @@ export class KnowledgePipelineStack extends cdk.Stack {
     );
     crawlerRole.addToPolicy(
       new iam.PolicyStatement({
+        // Without bucket-level s3:ListBucket, GetObject on a non-existent
+        // key (e.g. the BFS state object before its first save) returns
+        // AccessDenied instead of NoSuchKey/404.
+        sid: 'CrawlBucketList',
+        effect: iam.Effect.ALLOW,
+        actions: ['s3:ListBucket'],
+        resources: [crawlBucketArn],
+      }),
+    );
+    crawlerRole.addToPolicy(
+      new iam.PolicyStatement({
         sid: 'InvokeEmbedder',
         effect: iam.Effect.ALLOW,
         actions: ['lambda:InvokeFunction'],
