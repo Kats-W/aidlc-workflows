@@ -58,7 +58,7 @@ def test_initial_state_resumes_from_persisted_state() -> None:
 
 
 def test_initial_state_starts_new_cycle_when_persisted_queue_is_empty() -> None:
-    loaded = (deque(), {"https://www.jibunbank.co.jp/", "https://help.jibunbank.co.jp/"})
+    loaded = (deque[str](), {"https://www.jibunbank.co.jp/", "https://help.jibunbank.co.jp/"})
     queue, visited = _initial_state(loaded, _SEEDS)
     assert list(queue) == [_normalize_url(u) for u in _SEEDS]
     assert visited == set()
