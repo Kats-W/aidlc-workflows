@@ -17,27 +17,28 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-1
-      - name: Query CloudWatch Logs for latest embedder run
+      - name: Query CloudWatch Logs for latest embedder runs
         run: |
           LOG_GROUP="/aws/lambda/au-jibun-bank-dev-embedder"
 
-          # Get the most recent log stream
-          STREAM=$(aws logs describe-log-streams \
+          # Get the 5 most recent log streams (a burst of batched async
+          # invocations spreads across many concurrent streams).
+          STREAMS=$(aws logs describe-log-streams \
             --log-group-name "$LOG_GROUP" \
             --order-by LastEventTime \
             --descending \
-            --max-items 1 \
-            --query 'logStreams[0].logStreamName' \
-            --output text | head -1)
+            --max-items 5 \
+            --query 'logStreams[*].logStreamName' \
+            --output text)
 
-          echo "Latest log stream: $STREAM"
-          echo ""
-
-          # Fetch all log events from that stream and dump relevant lines
-          aws logs get-log-events \
-            --log-group-name "$LOG_GROUP" \
-            --log-stream-name "$STREAM" \
-            --start-from-head \
-            --limit 10000 \
-            --query 'events[*].message' \
-            --output text | grep -E "(embedder finished|upserted|deleted|WARNING|ERROR|error|exception|Exception|AccessDenied|ValidationException)" || echo "(no summary lines found)"
+          for STREAM in $STREAMS; do
+            echo "=== Stream: $STREAM ==="
+            aws logs get-log-events \
+              --log-group-name "$LOG_GROUP" \
+              --log-stream-name "$STREAM" \
+              --start-from-head \
+              --limit 10000 \
+              --query 'events[*].message' \
+              --output text | grep -E "(embedder finished|upserted|deleted|WARNING|ERROR|error|exception|Exception|AccessDenied|ValidationException|Task timed out|REPORT RequestId|START RequestId)" || echo "(no summary lines found)"
+            echo ""
+          done
