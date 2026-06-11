@@ -70,6 +70,31 @@ async def test_diff_detects_deletion(diff_table) -> None:  # type: ignore[no-unt
     assert result.deleted == ["a#1"]
 
 
+async def test_diff_preserves_chunks_for_pages_not_crawled_this_run(
+    diff_table,  # type: ignore[no-untyped-def]
+) -> None:
+    differ = DifferEngine(diff_table)
+    await differ.commit(
+        await differ.diff([_chunk("a#0", "alpha"), _chunk("b#0", "beta")])
+    )
+    # This invocation only re-crawled page "a"; page "b" was outside this
+    # run's BFS frontier and must not be treated as deleted.
+    result = await differ.diff([_chunk("a#0", "alpha")], crawled_url_hashes={"a"})
+    assert result.deleted == []
+
+
+async def test_diff_deletes_stale_chunk_from_crawled_page(
+    diff_table,  # type: ignore[no-untyped-def]
+) -> None:
+    differ = DifferEngine(diff_table)
+    await differ.commit(
+        await differ.diff([_chunk("a#0", "alpha"), _chunk("a#1", "beta")])
+    )
+    # Page "a" was re-crawled and now yields only one chunk.
+    result = await differ.diff([_chunk("a#0", "alpha")], crawled_url_hashes={"a"})
+    assert result.deleted == ["a#1"]
+
+
 async def test_commit_writes_to_table(diff_table) -> None:  # type: ignore[no-untyped-def]
     differ = DifferEngine(diff_table)
     result = await differ.diff([_chunk("a#0", "alpha")])
