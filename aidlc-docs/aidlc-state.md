@@ -226,4 +226,22 @@
       確認。TIMEOUT_BUDGET_EXCEEDED 解消。Claude Haiku 4.5
       （jp.anthropic.claude-haiku-4-5-20251001-v1:0）への切替によりRAG音声
       パイプラインが8秒バジェット内で正常動作することを確認
+- [x] run-crawler.yml を手動実行（全ページ + FAQ クロール開始）。
+      check-crawler.yml で結果確認: crawled:327 / added:79 / changed:138 /
+      deleted:1 / errors:[]。ただし15分のLambdaタイムアウトで打ち切られ、
+      remaining_queue:22674 と判明 → クローラートラップ（クエリ文字列付き
+      内部リンクが無限に新規URL扱いされる現象）の疑い
+- [x] クローラートラップ対策: src/crawler/handler.py の _normalize_url を
+      ホスト別のクエリ文字列正規化に変更
+      - help.jibunbank.co.jp（FAQ）: `id` パラメータのみ保持（ユーザー確認:
+        FAQはクエリ文字列で出し分けており id パラメータが必須、それ以外は不要）
+      - www.jibunbank.co.jp（コーポレートサイト）: クエリ文字列を完全除去
+        （ユーザー確認: クエリ文字列なしでも大きな影響なし）
+      - tests/unit/crawler/test_handler.py 新規追加（_normalize_url の
+        フラグメント除去/ルートパス補完/ホスト別クエリ正規化を検証）
+      - 品質ゲート確認済み: ruff check（pass）/ mypy src tests（pass）/
+        pytest tests/unit -q（336 passed、test_channel_switch.py の
+        既知無関係failure 1件のみ）
+- [ ] PRマージ・cdk-deploy-dev 後、run-crawler.yml を再実行してクローラー
+      トラップが解消され全ページ + FAQ のクロールが収束することを確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）

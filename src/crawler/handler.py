@@ -21,7 +21,7 @@ import os
 import random
 from collections import deque
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 import boto3
 import httpx
@@ -40,6 +40,10 @@ _MIN_DELAY_SECONDS: float = 1.0
 _MAX_DELAY_SECONDS: float = 3.0
 # Stop enqueueing new pages this many ms before the Lambda deadline.
 _TIMEOUT_MARGIN_MS: int = 60_000
+# FAQ host: distinct articles are addressed via the `id` query parameter, so
+# it must be preserved. All other query parameters (tracking/session params)
+# are dropped to avoid a crawler-trap explosion of near-duplicate URLs.
+_FAQ_HOSTS: frozenset[str] = frozenset({"help.jibunbank.co.jp", "www.help.jibunbank.co.jp"})
 
 
 def _target_urls() -> list[str]:
@@ -55,10 +59,21 @@ def _target_urls() -> list[str]:
 
 
 def _normalize_url(url: str) -> str:
-    """Strip fragment; ensure root path ends with '/'."""
+    """Strip fragment; normalize the query string; ensure root path ends with '/'.
+
+    On the FAQ host, only the `id` parameter (which selects the article) is
+    kept; on all other hosts the query string is dropped entirely. This
+    prevents tracking/session query parameters from causing a crawler-trap
+    explosion of near-duplicate URLs.
+    """
     p = urlparse(url)
     path = p.path if p.path else "/"
-    return p._replace(fragment="", path=path).geturl()
+    if p.hostname in _FAQ_HOSTS:
+        kept = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if k == "id"]
+        query = urlencode(kept)
+    else:
+        query = ""
+    return p._replace(fragment="", path=path, query=query).geturl()
 
 
 async def _fetch(client: httpx.AsyncClient, url: str) -> str:
