@@ -62,6 +62,7 @@ async def test_upsert_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no
                     },
                 ],
                 "delete": [],
+                "rebuildCache": True,
             },
             None,
         )
@@ -86,10 +87,13 @@ async def test_delete_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no
                     },
                 ],
                 "delete": [],
+                "rebuildCache": True,
             },
             None,
         )
-        result = await h.handler({"upsert": [], "delete": ["a#0"]}, None)
+        result = await h.handler(
+            {"upsert": [], "delete": ["a#0"], "rebuildCache": True}, None
+        )
     assert result == {"upserted": 0, "deleted": 1}
     meta = json.loads(s3.get_object(Bucket=BUCKET, Key=META_KEY)["Body"].read())
     assert meta == []
@@ -101,6 +105,29 @@ async def test_no_changes_skips_cache_rebuild(aws_env) -> None:  # type: ignore[
     with patch.object(h, "BedrockClient", return_value=bedrock):
         result = await h.handler({"upsert": [], "delete": []}, None)
     assert result == {"upserted": 0, "deleted": 0}
+    with pytest.raises(ClientError):
+        s3.get_object(Bucket=BUCKET, Key=VECTORS_KEY)
+
+
+async def test_upsert_without_rebuild_flag_skips_cache_rebuild(aws_env) -> None:  # type: ignore[no-untyped-def]
+    s3 = aws_env
+    bedrock = _fake_bedrock()
+    with patch.object(h, "BedrockClient", return_value=bedrock):
+        result = await h.handler(
+            {
+                "upsert": [
+                    {
+                        "chunkId": "a#0",
+                        "sourceUrl": "https://x/faq",
+                        "text": "alpha",
+                        "contentHash": "h1",
+                    },
+                ],
+                "delete": [],
+            },
+            None,
+        )
+    assert result == {"upserted": 1, "deleted": 0}
     with pytest.raises(ClientError):
         s3.get_object(Bucket=BUCKET, Key=VECTORS_KEY)
 
@@ -122,6 +149,7 @@ async def test_cache_rebuild_failure_is_logged_not_raised(aws_env) -> None:  # t
                     },
                 ],
                 "delete": [],
+                "rebuildCache": True,
             },
             None,
         )

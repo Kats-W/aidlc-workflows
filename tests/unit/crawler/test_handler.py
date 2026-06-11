@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import json
 from collections import deque
+from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError
 
-from src.crawler.handler import _initial_state, _load_state, _normalize_url
+from src.crawler.differ import DiffResult
+from src.crawler.handler import (
+    _EMBEDDER_BATCH_SIZE,
+    _initial_state,
+    _invoke_embedder,
+    _load_state,
+    _normalize_url,
+)
+from src.crawler.parser import ContentChunk
 from src.crawler.state_store import CrawlStateStore
 
 
@@ -79,3 +89,30 @@ async def test_load_state_falls_back_to_fresh_cycle_on_s3_access_error() -> None
     queue, visited = await _load_state(store, _SEEDS)
     assert list(queue) == [_normalize_url(u) for u in _SEEDS]
     assert visited == set()
+
+
+def test_invoke_embedder_sets_rebuild_cache_only_on_last_batch(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("EMBEDDER_FUNCTION_NAME", "embedder-fn")
+    added = [
+        ContentChunk(
+            chunk_id=f"page#{i}",
+            source_url="https://x/faq",
+            index=i,
+            text=f"chunk {i}",
+            content_hash=f"h{i}",
+        )
+        for i in range(_EMBEDDER_BATCH_SIZE + 1)  # spans 2 batches
+    ]
+    result = DiffResult(added=added, changed=[], deleted=[])
+
+    lambda_client = MagicMock()
+    with patch("src.crawler.handler.boto3.client", return_value=lambda_client):
+        _invoke_embedder(result)
+
+    assert lambda_client.invoke.call_count == 2
+    payloads = [
+        json.loads(call.kwargs["Payload"].decode("utf-8"))
+        for call in lambda_client.invoke.call_args_list
+    ]
+    assert not payloads[0]["rebuildCache"]
+    assert payloads[1]["rebuildCache"] is True

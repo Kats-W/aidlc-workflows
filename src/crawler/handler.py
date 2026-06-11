@@ -173,11 +173,20 @@ def _invoke_embedder(result: DiffResult) -> None:
     client = boto3.client("lambda")
 
     # Batch upserts; send deletes only in the first batch.
-    batches = range(0, max(len(upsert_items), 1), _EMBEDDER_BATCH_SIZE)
+    batches = list(range(0, max(len(upsert_items), 1), _EMBEDDER_BATCH_SIZE))
     for batch_start in batches:
         upsert_batch = upsert_items[batch_start : batch_start + _EMBEDDER_BATCH_SIZE]
         delete_batch: list[str] = deletes if batch_start == 0 else []
-        payload = {"upsert": upsert_batch, "delete": delete_batch}
+        # Rebuilding the full S3 vector cache is O(corpus size), so the Embedder
+        # only does it when this flag is set — gated to the last batch. This is a
+        # best-effort signal: all batches are invoked asynchronously at roughly the
+        # same time and take roughly the same time to process, so the last batch
+        # usually finishes last, by which point most other batches' upserts have
+        # landed in DynamoDB. Any stragglers are picked up by the next crawl
+        # cycle's rebuild — the same eventual-consistency tradeoff used elsewhere
+        # in this pipeline (see "next scheduled crawl will catch up").
+        rebuild_cache = batch_start == batches[-1]
+        payload = {"upsert": upsert_batch, "delete": delete_batch, "rebuildCache": rebuild_cache}
         client.invoke(
             FunctionName=function_name,
             InvocationType="Event",  # asynchronous
@@ -189,6 +198,7 @@ def _invoke_embedder(result: DiffResult) -> None:
                 "batch_start": batch_start,
                 "upsert_count": len(upsert_batch),
                 "delete_count": len(delete_batch),
+                "rebuild_cache": rebuild_cache,
             },
         )
 

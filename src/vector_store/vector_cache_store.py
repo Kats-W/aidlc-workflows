@@ -2,7 +2,8 @@
 
 :class:`VectorCacheS3Store` persists the *entire* VectorStore corpus (embedding
 matrix + chunk metadata) as a single S3 object pair. The EmbedderLambda (U-02)
-rebuilds this cache after every diff it applies; :class:`CosineSimilaritySearcher`
+rebuilds this cache once per crawl cycle (on the final diff batch);
+:class:`CosineSimilaritySearcher`
 (U-03) reads it on a cold ``/tmp`` cache instead of running a full DynamoDB
 ``Scan`` on the request path.
 """
