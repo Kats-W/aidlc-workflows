@@ -4,6 +4,11 @@ Receives a diff payload from the CrawlerLambda — chunks to upsert (with text)
 and chunk ids to delete — embeds each upsert chunk with Titan v2, and
 reconciles the VectorStore table. The payload may be passed directly (small
 diffs) or reference S3 (large diffs); both forms are supported.
+
+The full S3 vector cache rebuild is O(corpus size) and is *not* run per batch;
+it only runs when the payload carries an explicit ``rebuildCache`` flag (the
+CrawlerLambda sets it on the final batch). This keeps per-batch invocations
+fast and within the Lambda timeout even for large crawls.
 """
 
 from __future__ import annotations
@@ -68,7 +73,11 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     for chunk_id in deletes:
         await vector_store.delete(chunk_id)
 
-    if bucket and (upserted or deletes):
+    # Gate the full cache rebuild on an explicit flag rather than running it on
+    # every batch: the rebuild does a full DynamoDB scan + S3 upload of the whole
+    # corpus (O(corpus size)), so doing it per batch blows the Lambda timeout for
+    # large crawls. The CrawlerLambda sets ``rebuildCache`` only on the last batch.
+    if bucket and payload.get("rebuildCache"):
         try:
             items = await vector_store.scan_all()
             matrix, meta = build_matrix_and_meta(items)
