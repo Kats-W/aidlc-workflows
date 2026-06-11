@@ -1,16 +1,25 @@
 """CrawlerLambda entry point (US-2.1 weekly crawl, US-2.2 diff update).
 
 Triggered weekly by EventBridge Scheduler. The handler performs a BFS crawl
-starting from the seed URLs in ``CRAWLER_TARGET_URLS``, restricted to the
-same hosts as the seeds. It:
+restricted to the same hosts as the seed URLs in ``CRAWLER_TARGET_URLS``. It:
 
-1. loads ``robots.txt`` per host and obeys disallow rules,
-2. fetches each URL with ``httpx`` honouring a 1-3s polite random delay,
-3. parses + chunks the HTML, persists raw text to S3,
-4. extracts same-host links and enqueues them for BFS continuation,
-5. stops gracefully 60s before the Lambda deadline,
-6. computes a content diff against the ContentDiff table,
-7. commits the diff and asynchronously invokes the EmbedderLambda with it.
+1. resumes the BFS queue/visited set persisted from the previous invocation
+   (or starts a fresh cycle from the seed URLs if none is persisted, or the
+   previous cycle finished),
+2. loads ``robots.txt`` per host and obeys disallow rules,
+3. fetches each URL with ``httpx`` honouring a 1-3s polite random delay,
+4. parses + chunks the HTML, persists raw text to S3,
+5. extracts same-host links and enqueues them for BFS continuation,
+6. stops gracefully 60s before the Lambda deadline and persists the remaining
+   queue/visited set for the next invocation,
+7. computes a content diff against the ContentDiff table, scoped to the pages
+   crawled this invocation,
+8. commits the diff and asynchronously invokes the EmbedderLambda with it.
+
+A full BFS cycle may span many invocations for a large site. When the queue
+empties (every reachable page has been visited at least once this cycle), the
+next invocation starts a new cycle from the seed URLs with an empty visited
+set, so previously-crawled pages are re-crawled to detect content changes.
 """
 
 from __future__ import annotations
@@ -27,11 +36,12 @@ import boto3
 import httpx
 from aws_lambda_powertools import Logger
 
-from src.common.errors import CrawlerError, FetchTimeoutError
+from src.common.errors import CrawlerError, FetchTimeoutError, ParseError
 from src.crawler.differ import DifferEngine, DiffResult
 from src.crawler.parser import ContentChunk, ContentParser
 from src.crawler.robots import USER_AGENT, RobotsTxtGuard
 from src.crawler.s3_store import S3ContentStore
+from src.crawler.state_store import CrawlStateStore
 
 logger = Logger()
 
@@ -74,6 +84,21 @@ def _normalize_url(url: str) -> str:
     else:
         query = ""
     return p._replace(fragment="", path=path, query=query).geturl()
+
+
+def _initial_state(
+    loaded: tuple[deque[str], set[str]] | None, seeds: list[str]
+) -> tuple[deque[str], set[str]]:
+    """Return the BFS ``(queue, visited)`` to resume from.
+
+    Starts a fresh crawl cycle (seed URLs, empty visited set) when no state
+    was persisted yet, or the previous cycle finished (empty queue) —
+    restarting the cycle is what allows already-visited pages to be
+    re-crawled for diff detection.
+    """
+    if loaded is None or not loaded[0]:
+        return deque(_normalize_url(u) for u in seeds), set()
+    return loaded
 
 
 async def _fetch(client: httpx.AsyncClient, url: str) -> str:
@@ -159,13 +184,15 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     parser = ContentParser()
     store = S3ContentStore(bucket=bucket)
+    state_store = CrawlStateStore(bucket=bucket)
     differ = DifferEngine(boto3.resource("dynamodb").Table(diff_table_name))
 
     allowed_hosts: set[str] = {httpx.URL(u).host for u in seeds}
-    visited: set[str] = set()
-    queue: deque[str] = deque(_normalize_url(u) for u in seeds)
+    queue, visited = _initial_state(await state_store.load(), seeds)
+    queued: set[str] = set(queue)
     guards: dict[str, RobotsTxtGuard] = {}
     all_chunks: list[ContentChunk] = []
+    crawled_url_hashes: set[str] = set()
     errors: list[str] = []
     crawled = 0
 
@@ -207,18 +234,32 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 chunks, html = await _crawl_url(client, url, guard, parser, store)
                 all_chunks.extend(chunks)
                 crawled += 1
+                crawled_url_hashes.add(parser.compute_hash(url))
 
                 # Enqueue discovered same-host links.
                 for link in parser.extract_links(html, url):
                     norm = _normalize_url(link)
-                    if httpx.URL(norm).host in allowed_hosts and norm not in visited:
+                    if (
+                        httpx.URL(norm).host in allowed_hosts
+                        and norm not in visited
+                        and norm not in queued
+                    ):
                         queue.append(norm)
+                        queued.add(norm)
+            except ParseError as exc:
+                # Page fetched successfully but yielded no extractable text:
+                # treat as a definitive result for diff purposes (its previous
+                # chunks, if any, are stale and should be marked deleted).
+                crawled_url_hashes.add(parser.compute_hash(url))
+                errors.append(f"{url}: {exc.code}: {exc.message}")
             except CrawlerError as exc:
                 errors.append(f"{url}: {exc.code}: {exc.message}")
 
             await asyncio.sleep(random.uniform(_MIN_DELAY_SECONDS, _MAX_DELAY_SECONDS))
 
-    result = await differ.diff(all_chunks)
+    await state_store.save(queue, visited)
+
+    result = await differ.diff(all_chunks, crawled_url_hashes)
     await differ.commit(result)
     if not result.is_empty:
         try:
@@ -235,6 +276,7 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "added": len(result.added),
         "changed": len(result.changed),
         "deleted": len(result.deleted),
+        "remaining_queue": len(queue),
         "errors": errors,
     }
     logger.info("crawl finished", extra=summary)

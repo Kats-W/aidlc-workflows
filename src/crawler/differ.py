@@ -56,8 +56,22 @@ class DifferEngine:
         """Return the SHA-256 hex digest of ``text`` (UTF-8 encoded)."""
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    async def diff(self, new_chunks: list[ContentChunk]) -> DiffResult:
-        """Compare ``new_chunks`` to the stored state and classify changes."""
+    async def diff(
+        self, new_chunks: list[ContentChunk], crawled_url_hashes: set[str] | None = None
+    ) -> DiffResult:
+        """Compare ``new_chunks`` to the stored state and classify changes.
+
+        Args:
+            new_chunks: Chunks produced by this invocation's crawl.
+            crawled_url_hashes: ``{source_url_hash}`` for every page actually
+                crawled this invocation. When given, a stored chunk is only
+                classified as *deleted* if it belongs to one of these pages
+                (i.e. the page was re-crawled and no longer yields that
+                chunk). Stored chunks belonging to pages *not* visited this
+                invocation (e.g. a partial BFS resumed across invocations)
+                are left untouched. When ``None``, every stored chunk absent
+                from ``new_chunks`` is treated as deleted (single-pass crawl).
+        """
         stored = await self._load_stored_hashes()
         seen: set[str] = set()
         added: list[ContentChunk] = []
@@ -71,7 +85,10 @@ class DifferEngine:
             elif prior != chunk.content_hash:
                 changed.append(chunk)
 
-        deleted = sorted(stored.keys() - seen)
+        stale = stored.keys() - seen
+        if crawled_url_hashes is not None:
+            stale = {cid for cid in stale if cid.split("#", 1)[0] in crawled_url_hashes}
+        deleted = sorted(stale)
         result = DiffResult(added=added, changed=changed, deleted=deleted)
         logger.info(
             "diff computed",

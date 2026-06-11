@@ -242,6 +242,42 @@
       - 品質ゲート確認済み: ruff check（pass）/ mypy src tests（pass）/
         pytest tests/unit -q（336 passed、test_channel_switch.py の
         既知無関係failure 1件のみ）
-- [ ] PRマージ・cdk-deploy-dev 後、run-crawler.yml を再実行してクローラー
-      トラップが解消され全ページ + FAQ のクロールが収束することを確認
+- [x] PRマージ・cdk-deploy-dev 後、run-crawler.yml を再実行してクローラー
+      トラップ修正の効果を確認: crawled:203 / added:0 / changed:12 /
+      deleted:4 / remaining_queue:13164（22674から減少）。ただし BFS の
+      queue/visited が呼び出し間で永続化されておらず毎回シードURLから
+      再開するため、「収束」の根拠としては不十分と判断（同じ浅い
+      フロンティアを再クロールしているだけの可能性が高い）
+- [x] BFSキュー/visited状態の永続化（a案）を実装
+      - src/crawler/state_store.py 新規追加: CrawlStateStore が
+        S3 (`_state/bfs_state.json`) に queue/visited を保存・復元。
+        既存の CrawlBucketWrite IAM ポリシー（`${crawlBucketArn}/*`）で
+        カバーされるため CDK 変更は不要
+      - src/crawler/handler.py: 起動時に永続化済み state をロードし
+        BFS を再開（_initial_state ヘルパー）。queue が空（=1サイクル
+        完了）の場合のみシードURL + 空visitedで新サイクルを開始
+        （再クロールにより差分検出を継続）。リンク追加時に `queued`
+        セットで重複エンキューを防止。ループ終了時（タイムアウト/
+        キュー枯渇いずれも）に state_store.save で永続化
+      - src/crawler/differ.py: DifferEngine.diff に
+        `crawled_url_hashes` 引数を追加。stored にあって今回の
+        crawlで見つからなかった chunk は、その chunk の url_hash が
+        `crawled_url_hashes` に含まれる場合のみ「deleted」とする
+        （= 今回のBFSで再訪していないページのchunkを誤って削除しない）。
+        handler は ParseError（フェッチ成功・本文抽出失敗）の場合も
+        url_hash を crawled_url_hashes に含める（FetchTimeoutError等の
+        一時的失敗は含めない）
+      - summary に remaining_queue を追加（モニタリング用）
+      - tests/unit/crawler/test_state_store.py 新規追加（save/load
+        ラウンドトリップ、未保存時None、不正JSON時None）
+      - tests/unit/crawler/test_differ.py に crawled_url_hashes の
+        スコープ動作のテストを追加
+      - tests/unit/crawler/test_handler.py に _initial_state
+        （新規開始/再開/サイクル完了時リセット）のテストを追加
+      - 品質ゲート確認済み: ruff check（pass）/ mypy（pass）/
+        pytest tests/unit -q（344 passed、test_channel_switch.py の
+        既知無関係failure 1件のみ）/ npx tsc --noEmit（pass）
+- [ ] PRマージ・cdk-deploy-dev 後、run-crawler.yml を複数回実行し
+      remaining_queue が単調減少して最終的に1サイクル完了（queue空→
+      新サイクルでvisitedリセット）することを確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
