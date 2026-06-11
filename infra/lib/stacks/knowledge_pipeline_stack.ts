@@ -95,7 +95,7 @@ export class KnowledgePipelineStack extends cdk.Stack {
         exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
       }),
       layers: [pythonDepsLayer],
-      timeout: cdk.Duration.minutes(5),
+      timeout: cdk.Duration.minutes(10),
       memorySize: 512,
       role: embedderRole,
       environment: commonEnv,
