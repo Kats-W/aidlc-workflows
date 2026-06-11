@@ -277,7 +277,37 @@
       - 品質ゲート確認済み: ruff check（pass）/ mypy（pass）/
         pytest tests/unit -q（344 passed、test_channel_switch.py の
         既知無関係failure 1件のみ）/ npx tsc --noEmit（pass）
-- [ ] PRマージ・cdk-deploy-dev 後、run-crawler.yml を複数回実行し
-      remaining_queue が単調減少して最終的に1サイクル完了（queue空→
-      新サイクルでvisitedリセット）することを確認
+- [x] BFS永続化（a案）デプロイ後の初回 run-crawler.yml/check-crawler.yml で
+      リグレッション発覚: CloudWatch Logsに
+      `[ERROR] S3AccessError: failed to load BFS state` が3回（Lambda
+      非同期呼び出しのデフォルト再試行込み）出力され、クロールが
+      一切実行されなくなっていた。state_store.load() が
+      get_object で NoSuchKey/404 以外の ClientError（権限エラー等）を
+      受けると S3AccessError を re-raise し、handler() 内でこれを
+      キャッチしていなかったため、_initial_state 到達前に handler 全体が
+      未処理例外で異常終了していた
+      - 修正: src/crawler/handler.py に _load_state ヘルパーを追加し、
+        state_store.load() が S3AccessError を送出した場合は
+        ログを残して loaded=None にフォールバック（永続化なしの
+        従来動作＝シードURLから再開）。state_store.save() の呼び出しも
+        try/except で囲み、保存失敗時もクロール結果（diff/embedder
+        invoke）の処理は継続（次回起動時にシードから再開するのみ）
+      - src/crawler/state_store.py: load/save失敗時に
+        logger.exception で bucket/key/error_code を含む構造化ログを
+        出力するよう変更（次回失敗時にCloudWatch上で根本原因
+        （AccessDenied等のAWSエラーコード）を特定できるようにするため）
+      - tests/unit/crawler/test_handler.py に
+        test_load_state_falls_back_to_fresh_cycle_on_s3_access_error
+        を追加（AccessDeniedを返すフェイクS3クライアントでフォール
+        バック動作を検証）
+      - 品質ゲート確認済み: ruff check（pass）/ mypy src tests（pass）/
+        pytest -q（345 passed、test_channel_switch.py の既知無関係
+        failure 1件のみ）
+      - 根本原因（なぜ本番で _state/bfs_state.json への get_object が
+        AccessDenied等になるか）は未特定。次回 run-crawler.yml 実行時の
+        ログ（logger.exceptionで出力されるerror_code）で要確認
+- [ ] PRマージ・cdk-deploy-dev 後、run-crawler.yml を複数回実行し、
+      (1) S3AccessErrorが解消したか（または error_code から根本原因を
+      特定できるか）、(2) remaining_queue が単調減少して最終的に
+      1サイクル完了（queue空→新サイクルでvisitedリセット）することを確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
