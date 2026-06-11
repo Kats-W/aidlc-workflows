@@ -50,6 +50,10 @@ class CrawlStateStore:
                 code = exc.response.get("Error", {}).get("Code", "")
                 if code in ("NoSuchKey", "404"):
                     return None
+                logger.exception(
+                    "failed to load BFS state",
+                    extra={"bucket": self._bucket, "key": _STATE_KEY, "error_code": code},
+                )
                 raise S3AccessError("failed to load BFS state") from exc
 
             try:
@@ -74,6 +78,11 @@ class CrawlStateStore:
                     ContentType="application/json",
                 )
             except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                logger.exception(
+                    "failed to save BFS state",
+                    extra={"bucket": self._bucket, "key": _STATE_KEY, "error_code": code},
+                )
                 raise S3AccessError("failed to save BFS state") from exc
 
         await asyncio.to_thread(_save)

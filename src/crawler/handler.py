@@ -36,7 +36,7 @@ import boto3
 import httpx
 from aws_lambda_powertools import Logger
 
-from src.common.errors import CrawlerError, FetchTimeoutError, ParseError
+from src.common.errors import CrawlerError, FetchTimeoutError, ParseError, S3AccessError
 from src.crawler.differ import DifferEngine, DiffResult
 from src.crawler.parser import ContentChunk, ContentParser
 from src.crawler.robots import USER_AGENT, RobotsTxtGuard
@@ -99,6 +99,23 @@ def _initial_state(
     if loaded is None or not loaded[0]:
         return deque(_normalize_url(u) for u in seeds), set()
     return loaded
+
+
+async def _load_state(
+    state_store: CrawlStateStore, seeds: list[str]
+) -> tuple[deque[str], set[str]]:
+    """Load persisted BFS state, falling back to a fresh cycle on S3 failure.
+
+    A failure to read the persisted state must not abort the whole crawl —
+    it degrades to the same "start fresh from seeds" behaviour as if no
+    state had ever been persisted.
+    """
+    try:
+        loaded = await state_store.load()
+    except S3AccessError:
+        logger.exception("failed to load BFS state; starting a fresh crawl cycle")
+        loaded = None
+    return _initial_state(loaded, seeds)
 
 
 async def _fetch(client: httpx.AsyncClient, url: str) -> str:
@@ -188,7 +205,7 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     differ = DifferEngine(boto3.resource("dynamodb").Table(diff_table_name))
 
     allowed_hosts: set[str] = {httpx.URL(u).host for u in seeds}
-    queue, visited = _initial_state(await state_store.load(), seeds)
+    queue, visited = await _load_state(state_store, seeds)
     queued: set[str] = set(queue)
     guards: dict[str, RobotsTxtGuard] = {}
     all_chunks: list[ContentChunk] = []
@@ -257,7 +274,12 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
             await asyncio.sleep(random.uniform(_MIN_DELAY_SECONDS, _MAX_DELAY_SECONDS))
 
-    await state_store.save(queue, visited)
+    try:
+        await state_store.save(queue, visited)
+    except S3AccessError:
+        # Log but do not re-raise: the next invocation will simply fail to
+        # resume and start a fresh cycle, same as today's behaviour.
+        logger.exception("failed to save BFS state; next invocation will start a fresh cycle")
 
     result = await differ.diff(all_chunks, crawled_url_hashes)
     await differ.commit(result)

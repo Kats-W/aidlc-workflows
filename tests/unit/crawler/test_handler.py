@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections import deque
 
-from src.crawler.handler import _initial_state, _normalize_url
+from botocore.exceptions import ClientError
+
+from src.crawler.handler import _initial_state, _load_state, _normalize_url
+from src.crawler.state_store import CrawlStateStore
 
 
 def test_normalize_strips_fragment() -> None:
@@ -60,5 +63,19 @@ def test_initial_state_resumes_from_persisted_state() -> None:
 def test_initial_state_starts_new_cycle_when_persisted_queue_is_empty() -> None:
     loaded = (deque[str](), {"https://www.jibunbank.co.jp/", "https://help.jibunbank.co.jp/"})
     queue, visited = _initial_state(loaded, _SEEDS)
+    assert list(queue) == [_normalize_url(u) for u in _SEEDS]
+    assert visited == set()
+
+
+class _DenyingS3Client:
+    """Fake S3 client whose ``get_object`` always fails with AccessDenied."""
+
+    def get_object(self, **kwargs: object) -> dict[str, object]:
+        raise ClientError({"Error": {"Code": "AccessDenied", "Message": "denied"}}, "GetObject")
+
+
+async def test_load_state_falls_back_to_fresh_cycle_on_s3_access_error() -> None:
+    store = CrawlStateStore(bucket="any-bucket", client=_DenyingS3Client())
+    queue, visited = await _load_state(store, _SEEDS)
     assert list(queue) == [_normalize_url(u) for u in _SEEDS]
     assert visited == set()
