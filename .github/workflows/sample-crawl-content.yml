@@ -1,0 +1,48 @@
+name: Sample Crawl Content
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  sample:
+    name: Sample crawled chunk content from S3
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-1
+      - name: Resolve crawl content bucket name
+        run: |
+          BUCKET=$(aws ssm get-parameter \
+            --name /au-jibun-bank/dev/s3/crawl-content-bucket-name \
+            --query 'Parameter.Value' --output text)
+          echo "Bucket: $BUCKET"
+          echo "BUCKET=$BUCKET" >> "$GITHUB_ENV"
+      - name: Count chunks per page (sample of first 5000 keys)
+        run: |
+          aws s3api list-objects-v2 \
+            --bucket "$BUCKET" \
+            --prefix "content/" \
+            --max-items 5000 \
+            --query 'Contents[].Key' \
+            --output text | tr '\t' '\n' | grep '^content/' > /tmp/keys.txt
+
+          echo "Sampled key count: $(wc -l < /tmp/keys.txt)"
+          echo ""
+          echo "=== Chunks per source-url-hash (top 10 in sample) ==="
+          awk -F'/' '{print $2}' /tmp/keys.txt | sort | uniq -c | sort -rn | head -10
+      - name: Dump sample chunk text from the most-chunked page
+        run: |
+          HASH=$(awk -F'/' '{print $2}' /tmp/keys.txt | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
+          echo "Sampling source-url-hash: $HASH"
+          for i in 0 1 2 50; do
+            echo ""
+            echo "--- content/$HASH/${i}.txt (first 800 chars) ---"
+            aws s3 cp "s3://$BUCKET/content/$HASH/${i}.txt" - 2>/dev/null | head -c 800 || echo "(not found)"
+          done
