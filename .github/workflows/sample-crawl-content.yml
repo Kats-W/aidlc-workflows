@@ -48,7 +48,9 @@ jobs:
         run: |
           set -o pipefail
           if [ -n "$INPUT_HASH" ]; then
-            HASH="$INPUT_HASH"
+            # workflow_dispatch text inputs commonly carry stray leading/trailing
+            # whitespace from copy-paste; strip it before validation.
+            HASH=$(echo "$INPUT_HASH" | xargs)
           else
             HASH=$(awk -F'/' '{print $2}' /tmp/keys.txt | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
           fi
