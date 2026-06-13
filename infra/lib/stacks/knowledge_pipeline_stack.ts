@@ -96,7 +96,13 @@ export class KnowledgePipelineStack extends cdk.Stack {
       }),
       layers: [pythonDepsLayer],
       timeout: cdk.Duration.minutes(10),
-      memorySize: 512,
+      // 1024MB (was 512): the final-batch cache rebuild scans the whole corpus
+      // (~5,700 items x 1024-dim) into a numpy matrix. Even after dropping the
+      // Decimal read path, peak resident set is ~300MB+, leaving thin headroom
+      // at 512MB. Lambda scales CPU with memory, so the extra memory also speeds
+      // up the numpy/JSON work; billed as duration x memory, halving rebuild
+      // duration while avoiding timeout retries is cost-neutral-or-better.
+      memorySize: 1024,
       role: embedderRole,
       environment: commonEnv,
       logRetention: logs.RetentionDays.THREE_MONTHS,
