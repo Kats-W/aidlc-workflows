@@ -23,7 +23,7 @@ export interface KnowledgePipelineStackProps extends cdk.StackProps {
  * embedding pipeline:
  *
  *   - CrawlerLambda  (Python 3.12, 15 min, 1024 MB): weekly crawl + diff.
- *   - EmbedderLambda (Python 3.12, 5 min, 512 MB): Titan v2 embed + upsert.
+ *   - EmbedderLambda (Python 3.12, 10 min, 1024 MB): Titan v2 embed + upsert.
  *   - EventBridge Scheduler: weekly Sunday 02:00 JST (17:00 UTC Saturday).
  *   - Least-privilege IAM (no "*" actions): scoped DynamoDB / S3 / Bedrock /
  *     Lambda invoke.
