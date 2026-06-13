@@ -23,7 +23,7 @@ export interface KnowledgePipelineStackProps extends cdk.StackProps {
  * embedding pipeline:
  *
  *   - CrawlerLambda  (Python 3.12, 15 min, 1024 MB): weekly crawl + diff.
- *   - EmbedderLambda (Python 3.12, 5 min, 512 MB): Titan v2 embed + upsert.
+ *   - EmbedderLambda (Python 3.12, 10 min, 1024 MB): Titan v2 embed + upsert.
  *   - EventBridge Scheduler: weekly Sunday 02:00 JST (17:00 UTC Saturday).
  *   - Least-privilege IAM (no "*" actions): scoped DynamoDB / S3 / Bedrock /
  *     Lambda invoke.
@@ -96,7 +96,13 @@ export class KnowledgePipelineStack extends cdk.Stack {
       }),
       layers: [pythonDepsLayer],
       timeout: cdk.Duration.minutes(10),
-      memorySize: 512,
+      // 1024MB (was 512): the final-batch cache rebuild scans the whole corpus
+      // (~5,700 items x 1024-dim) into a numpy matrix. Even after dropping the
+      // Decimal read path, peak resident set is ~300MB+, leaving thin headroom
+      // at 512MB. Lambda scales CPU with memory, so the extra memory also speeds
+      // up the numpy/JSON work; billed as duration x memory, halving rebuild
+      // duration while avoiding timeout retries is cost-neutral-or-better.
+      memorySize: 1024,
       role: embedderRole,
       environment: commonEnv,
       logRetention: logs.RetentionDays.THREE_MONTHS,

@@ -59,6 +59,37 @@ async def test_scan_all_returns_floats(vector_table) -> None:  # type: ignore[no
     assert by_id["a#0"]["sourceUrl"] == "https://x/faq"
 
 
+async def test_scan_all_embeddings_are_native_floats_not_decimal(  # type: ignore[no-untyped-def]
+    vector_table,
+) -> None:
+    """The read path must avoid ``Decimal`` entirely (memory-pressure fix)."""
+    store = VectorStore(table=vector_table)
+    await store.upsert(_chunk("a#0"), [0.123, 0.456, 0.789])
+    items = await store.scan_all()
+    embedding = items[0]["embedding"]
+    assert embedding == pytest.approx([0.123, 0.456, 0.789])
+    # Crucially: not Decimal, and not even a Decimal subclass.
+    assert all(type(v) is float for v in embedding)
+    assert not any(isinstance(v, Decimal) for v in embedding)
+    assert type(items[0]["chunkId"]) is str
+    assert type(items[0]["text"]) is str
+
+
+async def test_scan_all_paginates_across_pages(vector_table) -> None:  # type: ignore[no-untyped-def]
+    """Verify the low-level paginated scan returns every item."""
+    store = VectorStore(table=vector_table)
+    for i in range(25):
+        await store.upsert(_chunk(f"a#{i}"), [float(i), float(i) + 0.5])
+    items = await store.scan_all()
+    assert len(items) == 25
+    assert {it["chunkId"] for it in items} == {f"a#{i}" for i in range(25)}
+
+
+async def test_scan_all_empty_table_returns_empty(vector_table) -> None:  # type: ignore[no-untyped-def]
+    store = VectorStore(table=vector_table)
+    assert await store.scan_all() == []
+
+
 async def test_delete(vector_table) -> None:  # type: ignore[no-untyped-def]
     store = VectorStore(table=vector_table)
     await store.upsert(_chunk("a#0"), [1.0])

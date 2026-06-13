@@ -22,7 +22,7 @@
 | --- | --- |
 | COST-1 | 埋め込みは **差分チャンクのみ** 実行（変更が無ければ Bedrock を呼ばない）。 |
 | COST-2 | DynamoDB は On-Demand（PAY_PER_REQUEST）。週次バーストに最適。 |
-| COST-3 | EmbedderLambda メモリ 512MB、CrawlerLambda 1024MB（過剰割当を避ける）。 |
+| COST-3 | EmbedderLambda メモリ 1024MB、CrawlerLambda 1024MB（過剰割当を避ける）。EmbedderLambda は当初 512MB だったが、最終バッチのキャッシュ再構築（コーパス全体を numpy 行列化, ピーク約 300MB+）で余裕が薄く、CPU 増による高速化とタイムアウトリトライ回避でコスト中立のため 1024MB に引き上げた。 |
 | COST-4 | クロールは週次 1 回（Sun 02:00 JST）に限定。 |
 | COST-5 | Titan Embeddings v2、`dimensions=1024`（精度とストレージのバランス）。 |
 
