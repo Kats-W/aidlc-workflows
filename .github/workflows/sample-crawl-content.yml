@@ -2,6 +2,11 @@ name: Sample Crawl Content
 
 on:
   workflow_dispatch:
+    inputs:
+      hash:
+        description: "source-url-hash to sample (optional; defaults to the most-chunked hash in the sample)"
+        required: false
+        type: string
 
 permissions: {}
 
@@ -38,9 +43,19 @@ jobs:
           echo "=== Chunks per source-url-hash (top 10 in sample) ==="
           awk -F'/' '{print $2}' /tmp/keys.txt | sort | uniq -c | sort -rn | head -10
       - name: Dump sample chunk text from the most-chunked page
+        env:
+          INPUT_HASH: ${{ inputs.hash }}
         run: |
           set -o pipefail
-          HASH=$(awk -F'/' '{print $2}' /tmp/keys.txt | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
+          if [ -n "$INPUT_HASH" ]; then
+            HASH="$INPUT_HASH"
+          else
+            HASH=$(awk -F'/' '{print $2}' /tmp/keys.txt | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
+          fi
+          if ! [[ "$HASH" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Invalid hash format: $HASH"
+            exit 1
+          fi
           echo "Sampling source-url-hash: $HASH"
           for i in 0 1 2 50; do
             KEY="content/$HASH/${HASH}_${i}.txt"
