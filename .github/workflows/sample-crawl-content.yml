@@ -39,10 +39,16 @@ jobs:
           awk -F'/' '{print $2}' /tmp/keys.txt | sort | uniq -c | sort -rn | head -10
       - name: Dump sample chunk text from the most-chunked page
         run: |
+          set -o pipefail
           HASH=$(awk -F'/' '{print $2}' /tmp/keys.txt | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')
           echo "Sampling source-url-hash: $HASH"
           for i in 0 1 2 50; do
             echo ""
-            echo "--- content/$HASH/${i}.txt (first 800 chars) ---"
-            aws s3 cp "s3://$BUCKET/content/$HASH/${i}.txt" - 2>/dev/null | head -c 800 || echo "(not found)"
+            echo "--- content/$HASH/${i}.txt ---"
+            SIZE=$(aws s3api head-object --bucket "$BUCKET" --key "content/$HASH/${i}.txt" --query ContentLength --output text 2>&1) \
+              && echo "ContentLength: $SIZE bytes" \
+              || echo "head-object failed: $SIZE"
+            echo "--- body (first 800 chars) ---"
+            aws s3 cp "s3://$BUCKET/content/$HASH/${i}.txt" - | head -c 800
+            echo ""
           done
