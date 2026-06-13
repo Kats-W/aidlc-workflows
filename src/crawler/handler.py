@@ -54,6 +54,11 @@ _TIMEOUT_MARGIN_MS: int = 60_000
 # it must be preserved. All other query parameters (tracking/session params)
 # are dropped to avoid a crawler-trap explosion of near-duplicate URLs.
 _FAQ_HOSTS: frozenset[str] = frozenset({"help.jibunbank.co.jp", "www.help.jibunbank.co.jp"})
+# Only these Content-Types are treated as parseable pages. Non-HTML responses
+# (e.g. PDFs linked from a page) are skipped: BeautifulSoup.get_text() on a
+# PDF's raw bytes returns nearly the entire binary as "text", producing
+# thousands of meaningless chunks for a single document.
+_HTML_CONTENT_TYPES: tuple[str, ...] = ("text/html", "application/xhtml+xml")
 
 
 def _target_urls() -> list[str]:
@@ -118,14 +123,14 @@ async def _load_state(
     return _initial_state(loaded, seeds)
 
 
-async def _fetch(client: httpx.AsyncClient, url: str) -> str:
-    """Fetch a single URL's HTML, raising FetchTimeoutError on failure."""
+async def _fetch(client: httpx.AsyncClient, url: str) -> tuple[str, str]:
+    """Fetch a single URL's body and Content-Type, raising FetchTimeoutError on failure."""
     try:
         response = await client.get(url)
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise FetchTimeoutError(f"failed to fetch {url}") from exc
-    return response.text
+    return response.text, response.headers.get("content-type", "")
 
 
 async def _crawl_url(
@@ -140,7 +145,11 @@ async def _crawl_url(
         logger.info("robots disallowed, skipping", extra={"url": url})
         return [], ""
 
-    html = await _fetch(client, url)
+    html, content_type = await _fetch(client, url)
+    if not any(ct in content_type.lower() for ct in _HTML_CONTENT_TYPES):
+        logger.info("non-HTML content, skipping", extra={"url": url, "content_type": content_type})
+        return [], ""
+
     chunks = parser.parse(html, url)
     url_hash = parser.compute_hash(url)
     for chunk in chunks:
