@@ -8,7 +8,7 @@ on:
           Diff payload JSON. The default forces a vector-cache rebuild without
           changing any data (deleting a nonexistent chunk is idempotent).
         required: false
-        default: '{"upsert": [], "delete": ["__cache_rebuild__"]}'
+        default: '{"upsert": [], "delete": ["__cache_rebuild__"], "rebuildCache": true}'
 
 permissions: {}
 
