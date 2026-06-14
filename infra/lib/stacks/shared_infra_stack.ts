@@ -233,11 +233,17 @@ export class SharedInfraStack extends cdk.Stack {
 
     // -----------------------------------------------------------------------
     // 7. VPC (2 AZ, public + private subnets for future Lambda placement)
+    //
+    // No Lambda is currently placed in this VPC (all functions use the default
+    // Lambda networking, which already has internet access). NAT Gateways are
+    // billed hourly whether or not anything routes through them, so keep the
+    // count at 0 until a future Lambda actually needs VPC placement (e.g. to
+    // reach a VPC-only resource) — at that point, set this back to >=1.
     // -----------------------------------------------------------------------
     const vpc = new ec2.Vpc(this, 'Vpc', {
       vpcName: `${prefix}-vpc`,
       maxAzs: 2,
-      natGateways: env === 'prod' ? 2 : 1, // cost-aware: single NAT outside prod
+      natGateways: 0,
       subnetConfiguration: [
         {
           name: 'public',
