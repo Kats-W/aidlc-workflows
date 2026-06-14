@@ -131,6 +131,20 @@ async def test_s3_cache_missing_falls_back_to_scan() -> None:
     store.scan_all.assert_called_once()  # type: ignore[attr-defined]
 
 
+async def test_s3_cache_row_mismatch_falls_back_to_scan() -> None:
+    matrix, meta = build_matrix_and_meta(CORPUS)
+    # Simulate a read racing with an in-progress EmbedderLambda rebuild: the
+    # vectors object reflects one snapshot, the meta object another.
+    mismatched = (matrix, meta[:-1])
+    store = _store_with(CORPUS)
+    cache_store = _cache_store_with(mismatched)
+    s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    hits = await s.search([1.0, 0.0, 0.0], top_k=1)
+    assert hits[0].chunk_id == "a"
+    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
+    store.scan_all.assert_called_once()  # type: ignore[attr-defined]
+
+
 async def test_s3_cache_access_error_falls_back_to_scan() -> None:
     store = _store_with(CORPUS)
     cache_store = _cache_store_with(S3AccessError("boom"))

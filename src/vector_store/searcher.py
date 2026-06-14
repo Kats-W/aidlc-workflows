@@ -104,15 +104,26 @@ class CosineSimilaritySearcher:
         if self._cache_store is not None:
             try:
                 matrix, meta = await self._cache_store.read()
-                logger.info("vector cache loaded from s3", extra={"rows": len(meta)})
-                self._write_cache(matrix, meta)
-                return matrix, meta
             except ObjectNotFoundError:
                 logger.info("s3 vector cache not found, falling back to full scan")
             except S3AccessError as exc:
                 logger.warning(
                     "s3 vector cache read failed, falling back to full scan",
                     extra={"error": str(exc)},
+                )
+            else:
+                if matrix.shape[0] == len(meta):
+                    logger.info("vector cache loaded from s3", extra={"rows": len(meta)})
+                    self._write_cache(matrix, meta)
+                    return matrix, meta
+                # The cache's two objects (vectors.npy, vectors_meta.json) are written
+                # by separate S3 PutObject calls, so a read concurrent with an
+                # EmbedderLambda rebuild can observe a stale/fresh mismatch between
+                # them. Treat that as a transient miss and fall back to a full scan
+                # rather than indexing meta out of range.
+                logger.warning(
+                    "vector cache row mismatch, falling back to full scan",
+                    extra={"matrix_rows": int(matrix.shape[0]), "meta_rows": len(meta)},
                 )
 
         items = await self._store.scan_all()
