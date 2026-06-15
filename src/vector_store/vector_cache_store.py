@@ -68,7 +68,7 @@ class VectorCacheS3Store:
                 )
                 self._client.put_object(Bucket=self._bucket, Key=CACHE_KEY, Body=body)
             except ClientError as exc:
-                raise S3AccessError("failed to write vector cache") from exc
+                raise S3AccessError(f"failed to write vector cache: {exc}") from exc
 
         await asyncio.to_thread(_write)
         logger.info("vector cache written to s3", extra={"rows": len(meta)})
@@ -89,7 +89,7 @@ class VectorCacheS3Store:
                 code = exc.response.get("Error", {}).get("Code", "")
                 if code in ("NoSuchKey", "404"):
                     raise ObjectNotFoundError("vector cache not found in s3") from exc
-                raise S3AccessError("failed to read vector cache") from exc
+                raise S3AccessError(f"failed to read vector cache: {exc}") from exc
 
             unpacked = msgpack.unpackb(body, raw=False)
             matrix = np.load(io.BytesIO(unpacked["vectors"]))

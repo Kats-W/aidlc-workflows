@@ -102,29 +102,38 @@ class CosineSimilaritySearcher:
                 logger.warning("vector cache load failed, refreshing", extra={"error": str(exc)})
 
         if self._cache_store is not None:
+            # When an S3 cache is configured (production), a full DynamoDB
+            # ``scan_all()`` is no longer an acceptable fallback: at corpus
+            # scale (thousands of items x 1024-dim embeddings) the scan runs
+            # as a background thread via ``asyncio.to_thread``, and even
+            # though the RAG pipeline's own timeout fires and returns a
+            # fallback answer, ``asyncio.run()`` blocks on that thread during
+            # interpreter shutdown — so the Lambda still hits its hard 30s
+            # sandbox timeout and the caller gets no response at all. Treat
+            # any S3 cache miss/failure as an empty corpus instead: the
+            # caller gets a fast "no usable hits" fallback answer, and the
+            # next successful EmbedderLambda rebuild restores real results.
             try:
                 matrix, meta = await self._cache_store.read()
             except ObjectNotFoundError:
-                logger.info("s3 vector cache not found, falling back to full scan")
+                logger.info("s3 vector cache not found, returning empty corpus")
+                return np.empty((0, 0), dtype=np.float64), []
             except S3AccessError as exc:
                 logger.warning(
-                    "s3 vector cache read failed, falling back to full scan",
+                    "s3 vector cache read failed, returning empty corpus",
                     extra={"error": str(exc)},
                 )
+                return np.empty((0, 0), dtype=np.float64), []
             else:
                 if matrix.shape[0] == len(meta):
                     logger.info("vector cache loaded from s3", extra={"rows": len(meta)})
                     self._write_cache(matrix, meta)
                     return matrix, meta
-                # The cache's two objects (vectors.npy, vectors_meta.json) are written
-                # by separate S3 PutObject calls, so a read concurrent with an
-                # EmbedderLambda rebuild can observe a stale/fresh mismatch between
-                # them. Treat that as a transient miss and fall back to a full scan
-                # rather than indexing meta out of range.
                 logger.warning(
-                    "vector cache row mismatch, falling back to full scan",
+                    "vector cache row mismatch, returning empty corpus",
                     extra={"matrix_rows": int(matrix.shape[0]), "meta_rows": len(meta)},
                 )
+                return np.empty((0, 0), dtype=np.float64), []
 
         items = await self._store.scan_all()
         matrix, meta = build_matrix_and_meta(items)

@@ -121,17 +121,17 @@ async def test_s3_cache_hit_skips_dynamo_scan() -> None:
     assert os.path.exists(CACHE_META)
 
 
-async def test_s3_cache_missing_falls_back_to_scan() -> None:
+async def test_s3_cache_missing_returns_empty_corpus() -> None:
     store = _store_with(CORPUS)
     cache_store = _cache_store_with(ObjectNotFoundError("not built yet"))
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
-    assert hits[0].chunk_id == "a"
+    assert hits == []
     cache_store.read.assert_called_once()  # type: ignore[attr-defined]
-    store.scan_all.assert_called_once()  # type: ignore[attr-defined]
+    store.scan_all.assert_not_called()  # type: ignore[attr-defined]
 
 
-async def test_s3_cache_row_mismatch_falls_back_to_scan() -> None:
+async def test_s3_cache_row_mismatch_returns_empty_corpus() -> None:
     matrix, meta = build_matrix_and_meta(CORPUS)
     # Simulate a read racing with an in-progress EmbedderLambda rebuild: the
     # vectors object reflects one snapshot, the meta object another.
@@ -140,19 +140,19 @@ async def test_s3_cache_row_mismatch_falls_back_to_scan() -> None:
     cache_store = _cache_store_with(mismatched)
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
-    assert hits[0].chunk_id == "a"
+    assert hits == []
     cache_store.read.assert_called_once()  # type: ignore[attr-defined]
-    store.scan_all.assert_called_once()  # type: ignore[attr-defined]
+    store.scan_all.assert_not_called()  # type: ignore[attr-defined]
 
 
-async def test_s3_cache_access_error_falls_back_to_scan() -> None:
+async def test_s3_cache_access_error_returns_empty_corpus() -> None:
     store = _store_with(CORPUS)
     cache_store = _cache_store_with(S3AccessError("boom"))
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
-    assert hits[0].chunk_id == "a"
+    assert hits == []
     cache_store.read.assert_called_once()  # type: ignore[attr-defined]
-    store.scan_all.assert_called_once()  # type: ignore[attr-defined]
+    store.scan_all.assert_not_called()  # type: ignore[attr-defined]
 
 
 def test_cosine_self_similarity_is_one() -> None:

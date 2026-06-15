@@ -95,7 +95,13 @@ export class KnowledgePipelineStack extends cdk.Stack {
         exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
       }),
       layers: [pythonDepsLayer],
-      timeout: cdk.Duration.minutes(10),
+      // 15 minutes (the Lambda hard maximum, was 10): the final-batch cache
+      // rebuild's full DynamoDB scan_all() grows with the corpus (~6,500+
+      // items and counting as the crawl continues). A 10-minute budget was
+      // observed to be exceeded mid-rebuild, leaving the synchronous invoke
+      // connection abruptly closed with no response and the S3 cache never
+      // refreshed.
+      timeout: cdk.Duration.minutes(15),
       // 1024MB (was 512): the final-batch cache rebuild scans the whole corpus
       // (~5,700 items x 1024-dim) into a numpy matrix. Even after dropping the
       // Decimal read path, peak resident set is ~300MB+, leaving thin headroom
