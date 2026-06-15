@@ -123,6 +123,21 @@ export class ConversationStack extends cdk.Stack {
       }),
     );
     ragRole.addToPolicy(
+      // S3 returns 403 AccessDenied (not 404 NoSuchKey) for GetObject on a
+      // missing key when the caller lacks s3:ListBucket — it hides whether
+      // the object exists. Without this, a not-yet-built vector cache is
+      // misreported as an access-denied failure rather than "not found".
+      new iam.PolicyStatement({
+        sid: 'VectorCacheListPrefix',
+        effect: iam.Effect.ALLOW,
+        actions: ['s3:ListBucket'],
+        resources: [crawlBucketArn],
+        conditions: {
+          StringLike: { 's3:prefix': ['vector-cache/*'] },
+        },
+      }),
+    );
+    ragRole.addToPolicy(
       new iam.PolicyStatement({
         sid: 'CustomerHistoryReadWrite',
         effect: iam.Effect.ALLOW,
