@@ -39,9 +39,13 @@ def build_matrix_and_meta(items: list[dict[str, Any]]) -> tuple[np.ndarray, list
         for it in items
     ]
     if items:
-        matrix = np.asarray([it["embedding"] for it in items], dtype=np.float64)
+        # float32 halves the matrix/cache size versus float64 with no
+        # meaningful loss of cosine-similarity precision, which matters both
+        # for the EmbedderLambda rebuild's peak memory and the cache object
+        # size read back by the searcher.
+        matrix = np.asarray([it["embedding"] for it in items], dtype=np.float32)
     else:
-        matrix = np.empty((0, 0), dtype=np.float64)
+        matrix = np.empty((0, 0), dtype=np.float32)
     return matrix, meta
 
 

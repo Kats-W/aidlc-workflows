@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
+import numpy as np
 from aws_lambda_powertools import Logger
 from boto3.dynamodb.types import TypeDeserializer
 from botocore.exceptions import ClientError
@@ -116,6 +117,13 @@ class VectorStore:
         materializing millions of short-lived ``Decimal`` objects at once,
         which previously pegged the Lambda at its memory limit and caused GC
         thrashing / timeouts during the cache rebuild.
+
+        Each embedding is additionally converted to a ``float32`` numpy array
+        as soon as it is deserialized. A 1024-element Python ``list[float]``
+        costs ~33KB (24 bytes/float object + 8 bytes/pointer), while the
+        equivalent ``float32`` ndarray costs ~4KB — an ~8x reduction. At
+        corpus scale (tens of thousands of chunks) this is the difference
+        between the scan completing and the Lambda being OOM-killed mid-scan.
         """
 
         deserializer = _FloatDeserializer()
@@ -139,7 +147,9 @@ class VectorStore:
                                 "chunkId": _deser(item["chunkId"]),
                                 "sourceUrl": _deser(item.get("sourceUrl")) or "",
                                 "text": _deser(item.get("text")) or "",
-                                "embedding": _deser(item.get("embedding")) or [],
+                                "embedding": np.asarray(
+                                    _deser(item.get("embedding")) or [], dtype=np.float32
+                                ),
                             }
                         )
                     last_key = response.get("LastEvaluatedKey")

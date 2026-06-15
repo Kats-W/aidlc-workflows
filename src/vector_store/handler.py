@@ -81,6 +81,11 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         try:
             items = await vector_store.scan_all()
             matrix, meta = build_matrix_and_meta(items)
+            # ``items`` holds one float32 ndarray per chunk and is no longer
+            # needed once copied into ``matrix``; drop it before the S3
+            # write (which itself holds a serialized copy of ``matrix`` plus
+            # the msgpack-packed body) to reduce peak memory at corpus scale.
+            del items
             await VectorCacheS3Store(bucket=bucket).write(matrix, meta)
         except S3AccessError as exc:
             logger.warning("vector cache rebuild failed", extra={"error": str(exc)})

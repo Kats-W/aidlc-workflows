@@ -51,3 +51,13 @@ jobs:
           echo ""
           echo "----- Response -----"
           cat response.json | jq .
+
+          # `aws lambda invoke` exits 0 as long as it receives *a* response,
+          # even when that response is a Lambda-side error (e.g.
+          # Runtime.OutOfMemory) — so a crashed invocation would otherwise be
+          # reported as job "success". Fail explicitly when the payload
+          # carries an errorType.
+          if jq -e 'has("errorType")' response.json > /dev/null; then
+            echo "::error::EmbedderLambda invocation failed: $(jq -r .errorMessage response.json)"
+            exit 1
+          fi

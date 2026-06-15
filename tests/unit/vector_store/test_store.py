@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import boto3
+import numpy as np
 import pytest
 from moto import mock_aws
 
@@ -54,8 +55,8 @@ async def test_scan_all_returns_floats(vector_table) -> None:  # type: ignore[no
     items = await store.scan_all()
     assert len(items) == 2
     by_id = {it["chunkId"]: it for it in items}
-    assert by_id["a#0"]["embedding"] == [0.5, 0.5]
-    assert all(isinstance(v, float) for v in by_id["a#1"]["embedding"])
+    assert np.array_equal(by_id["a#0"]["embedding"], [0.5, 0.5])
+    assert by_id["a#1"]["embedding"].dtype == np.float32
     assert by_id["a#0"]["sourceUrl"] == "https://x/faq"
 
 
@@ -67,10 +68,10 @@ async def test_scan_all_embeddings_are_native_floats_not_decimal(  # type: ignor
     await store.upsert(_chunk("a#0"), [0.123, 0.456, 0.789])
     items = await store.scan_all()
     embedding = items[0]["embedding"]
-    assert embedding == pytest.approx([0.123, 0.456, 0.789])
-    # Crucially: not Decimal, and not even a Decimal subclass.
-    assert all(type(v) is float for v in embedding)
-    assert not any(isinstance(v, Decimal) for v in embedding)
+    # A float32 numpy array, not Decimal (and not a Python list of Decimal).
+    assert embedding.dtype == np.float32
+    assert embedding == pytest.approx([0.123, 0.456, 0.789], abs=1e-6)
+    assert not any(isinstance(v, Decimal) for v in embedding.tolist())
     assert type(items[0]["chunkId"]) is str
     assert type(items[0]["text"]) is str
 
