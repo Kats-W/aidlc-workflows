@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock, patch
 
 import boto3
+import msgpack
 import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from src.common.errors import S3AccessError
 from src.vector_store import handler as h
-from src.vector_store.vector_cache_store import META_KEY, VECTORS_KEY
+from src.vector_store.vector_cache_store import CACHE_KEY
 
 TABLE_NAME = "vector-store-test"
 BUCKET = "crawl-content-test"
+
+
+def _read_cache_meta(s3: object, bucket: str) -> list[dict]:
+    body = s3.get_object(Bucket=bucket, Key=CACHE_KEY)["Body"].read()  # type: ignore[attr-defined]
+    return msgpack.unpackb(body, raw=False)["meta"]
 
 
 @pytest.fixture()
@@ -67,8 +72,7 @@ async def test_upsert_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no
             None,
         )
     assert result == {"upserted": 1, "deleted": 0}
-    assert s3.get_object(Bucket=BUCKET, Key=VECTORS_KEY)["Body"].read()
-    meta = json.loads(s3.get_object(Bucket=BUCKET, Key=META_KEY)["Body"].read())
+    meta = _read_cache_meta(s3, BUCKET)
     assert meta == [{"chunkId": "a#0", "sourceUrl": "https://x/faq", "text": "alpha"}]
 
 
@@ -95,7 +99,7 @@ async def test_delete_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no
             {"upsert": [], "delete": ["a#0"], "rebuildCache": True}, None
         )
     assert result == {"upserted": 0, "deleted": 1}
-    meta = json.loads(s3.get_object(Bucket=BUCKET, Key=META_KEY)["Body"].read())
+    meta = _read_cache_meta(s3, BUCKET)
     assert meta == []
 
 
@@ -106,7 +110,7 @@ async def test_no_changes_skips_cache_rebuild(aws_env) -> None:  # type: ignore[
         result = await h.handler({"upsert": [], "delete": []}, None)
     assert result == {"upserted": 0, "deleted": 0}
     with pytest.raises(ClientError):
-        s3.get_object(Bucket=BUCKET, Key=VECTORS_KEY)
+        s3.get_object(Bucket=BUCKET, Key=CACHE_KEY)
 
 
 async def test_upsert_without_rebuild_flag_skips_cache_rebuild(aws_env) -> None:  # type: ignore[no-untyped-def]
@@ -129,7 +133,7 @@ async def test_upsert_without_rebuild_flag_skips_cache_rebuild(aws_env) -> None:
         )
     assert result == {"upserted": 1, "deleted": 0}
     with pytest.raises(ClientError):
-        s3.get_object(Bucket=BUCKET, Key=VECTORS_KEY)
+        s3.get_object(Bucket=BUCKET, Key=CACHE_KEY)
 
 
 async def test_cache_rebuild_failure_is_logged_not_raised(aws_env) -> None:  # type: ignore[no-untyped-def]

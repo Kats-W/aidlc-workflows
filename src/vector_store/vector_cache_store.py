@@ -1,7 +1,7 @@
 """S3-backed combined vector cache for the cosine similarity searcher.
 
 :class:`VectorCacheS3Store` persists the *entire* VectorStore corpus (embedding
-matrix + chunk metadata) as a single S3 object pair. The EmbedderLambda (U-02)
+matrix + chunk metadata) as a single S3 object. The EmbedderLambda (U-02)
 rebuilds this cache once per crawl cycle (on the final diff batch);
 :class:`CosineSimilaritySearcher`
 (U-03) reads it on a cold ``/tmp`` cache instead of running a full DynamoDB
@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import asyncio
 import io
-import json
 from typing import Any
 
 import boto3
+import msgpack
 import numpy as np
 from aws_lambda_powertools import Logger
 from botocore.exceptions import ClientError
@@ -24,9 +24,12 @@ from src.common.errors import ObjectNotFoundError, S3AccessError
 
 logger = Logger()
 
-#: Object keys for the combined-corpus cache.
-VECTORS_KEY: str = "vector-cache/vectors.npy"
-META_KEY: str = "vector-cache/vectors_meta.json"
+#: Object key for the combined-corpus cache. The matrix and metadata are
+#: packed into a single object so a reader always observes one atomic
+#: snapshot — never a mix of an old and a new write (which previously
+#: happened with two independent PutObject calls and caused
+#: ``matrix.shape[0] != len(meta)`` under concurrent rebuilds).
+CACHE_KEY: str = "vector-cache/cache.msgpack"
 
 
 def build_matrix_and_meta(items: list[dict[str, Any]]) -> tuple[np.ndarray, list[dict[str, Any]]]:
@@ -54,18 +57,16 @@ class VectorCacheS3Store:
         self._client = client or boto3.client("s3")
 
     async def write(self, matrix: np.ndarray, meta: list[dict[str, Any]]) -> None:
-        """Upload the combined corpus matrix + metadata to S3."""
+        """Upload the combined corpus matrix + metadata to S3 as one object."""
 
         def _write() -> None:
             try:
-                buf = io.BytesIO()
-                np.save(buf, matrix)
-                self._client.put_object(Bucket=self._bucket, Key=VECTORS_KEY, Body=buf.getvalue())
-                self._client.put_object(
-                    Bucket=self._bucket,
-                    Key=META_KEY,
-                    Body=json.dumps(meta, ensure_ascii=False).encode("utf-8"),
+                vectors_buf = io.BytesIO()
+                np.save(vectors_buf, matrix)
+                body = msgpack.packb(
+                    {"vectors": vectors_buf.getvalue(), "meta": meta}, use_bin_type=True
                 )
+                self._client.put_object(Bucket=self._bucket, Key=CACHE_KEY, Body=body)
             except ClientError as exc:
                 raise S3AccessError("failed to write vector cache") from exc
 
@@ -82,18 +83,17 @@ class VectorCacheS3Store:
 
         def _read() -> tuple[np.ndarray, list[dict[str, Any]]]:
             try:
-                vectors_obj = self._client.get_object(Bucket=self._bucket, Key=VECTORS_KEY)
-                meta_obj = self._client.get_object(Bucket=self._bucket, Key=META_KEY)
-                vectors_body = vectors_obj["Body"].read()
-                meta_body = meta_obj["Body"].read()
+                obj = self._client.get_object(Bucket=self._bucket, Key=CACHE_KEY)
+                body = obj["Body"].read()
             except ClientError as exc:
                 code = exc.response.get("Error", {}).get("Code", "")
                 if code in ("NoSuchKey", "404"):
                     raise ObjectNotFoundError("vector cache not found in s3") from exc
                 raise S3AccessError("failed to read vector cache") from exc
 
-            matrix = np.load(io.BytesIO(vectors_body))
-            meta = json.loads(meta_body)
+            unpacked = msgpack.unpackb(body, raw=False)
+            matrix = np.load(io.BytesIO(unpacked["vectors"]))
+            meta: list[dict[str, Any]] = unpacked["meta"]
             return matrix, meta
 
         return await asyncio.to_thread(_read)
