@@ -38,9 +38,12 @@ def _hit(score: float) -> SearchHit:
     return SearchHit(chunk_id="c1", source_url="https://x/faq", text="残高照会方法", score=score)
 
 
+_noop_warm = patch.object(h, "_ensure_cache_warmed", new_callable=AsyncMock)
+
+
 async def test_happy_path_hit_true() -> None:
     deps = _make_deps(hits=[_hit(0.9)])
-    with patch.object(h, "_build_dependencies", return_value=deps):
+    with _noop_warm, patch.object(h, "_build_dependencies", return_value=deps):
         result = await h.handler(
             {"customerId": "cust-1", "userInput": "残高は?", "contactId": "ct1"}, None
         )
@@ -54,7 +57,7 @@ async def test_happy_path_hit_true() -> None:
 async def test_no_usable_hits_returns_hit_false() -> None:
     # Hit below MIN_HIT_SCORE -> treated as no match.
     deps = _make_deps(hits=[_hit(0.05)])
-    with patch.object(h, "_build_dependencies", return_value=deps):
+    with _noop_warm, patch.object(h, "_build_dependencies", return_value=deps):
         result = await h.handler(
             {"customerId": "cust-1", "userInput": "天気は?", "contactId": "ct1"}, None
         )
@@ -66,7 +69,7 @@ async def test_no_usable_hits_returns_hit_false() -> None:
 
 async def test_pii_is_masked_before_embed() -> None:
     deps = _make_deps(masked="[MASKED] です", entities=[{"Type": "NAME"}], hits=[_hit(0.9)])
-    with patch.object(h, "_build_dependencies", return_value=deps):
+    with _noop_warm, patch.object(h, "_build_dependencies", return_value=deps):
         await h.handler(
             {"customerId": "cust-1", "userInput": "私は山田太郎です", "contactId": "ct1"},
             None,
@@ -85,6 +88,7 @@ async def test_timeout_returns_fallback() -> None:
     bedrock.embed = AsyncMock(side_effect=_slow_embed)
     deps = (masker, personalizer, bedrock, searcher, history)
     with (
+        _noop_warm,
         patch.object(h, "_build_dependencies", return_value=deps),
         patch.object(h, "PIPELINE_BUDGET_SECONDS", 0.05),
     ):
@@ -98,7 +102,7 @@ async def test_bedrock_error_returns_fallback() -> None:
     masker, personalizer, bedrock, searcher, history = _make_deps(hits=[_hit(0.9)])
     bedrock.generate_answer = AsyncMock(side_effect=BedrockError("boom"))
     deps = (masker, personalizer, bedrock, searcher, history)
-    with patch.object(h, "_build_dependencies", return_value=deps):
+    with _noop_warm, patch.object(h, "_build_dependencies", return_value=deps):
         result = await h.handler(
             {"customerId": "cust-1", "userInput": "残高は?", "contactId": "ct1"}, None
         )

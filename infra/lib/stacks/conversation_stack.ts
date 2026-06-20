@@ -88,7 +88,10 @@ export class ConversationStack extends cdk.Stack {
     });
 
     // -----------------------------------------------------------------------
-    // 3. RagHandlerLambda (30s wall-clock; 6s asyncio budget enforced in code).
+    // 3. RagHandlerLambda (90s wall-clock; 6s asyncio budget enforced in code).
+    //    Cold start downloads the ~877 MB vector cache from S3 (129K items ×
+    //    1024-dim float32 + metadata). Peak memory during msgpack unpack is
+    //    ~2 GB; /tmp caches the numpy matrix (~530 MB) for warm invocations.
     // -----------------------------------------------------------------------
     const ragRole = this.makeLambdaRole('RagRole', `${prefix}-rag-role`, permissionBoundary);
     const ragHandler = new lambda.Function(this, 'RagHandlerLambda', {
@@ -97,8 +100,9 @@ export class ConversationStack extends cdk.Stack {
       handler: 'src.rag_handler.handler.lambda_handler',
       code,
       layers: [pythonDepsLayer],
-      timeout: cdk.Duration.seconds(30),
-      memorySize: 512,
+      timeout: cdk.Duration.seconds(90),
+      memorySize: 4096,
+      ephemeralStorageSize: cdk.Size.mebibytes(1536),
       role: ragRole,
       environment: commonEnv,
       logRetention: logs.RetentionDays.THREE_MONTHS,

@@ -102,13 +102,19 @@ export class KnowledgePipelineStack extends cdk.Stack {
       // connection abruptly closed with no response and the S3 cache never
       // refreshed.
       timeout: cdk.Duration.minutes(15),
-      // 1024MB (was 512): the final-batch cache rebuild scans the whole corpus
-      // (~5,700 items x 1024-dim) into a numpy matrix. Even after dropping the
-      // Decimal read path, peak resident set is ~300MB+, leaving thin headroom
-      // at 512MB. Lambda scales CPU with memory, so the extra memory also speeds
-      // up the numpy/JSON work; billed as duration x memory, halving rebuild
-      // duration while avoiding timeout retries is cost-neutral-or-better.
-      memorySize: 1024,
+      // 2048MB (was 1024 -> OOM): as the BFS crawl grows the corpus, the
+      // final-batch cache rebuild's scan_all() now holds tens of thousands of
+      // per-chunk embedding lists in memory at once, plus the rebuilt matrix
+      // and its serialized S3 copies. Two consecutive rebuilds were observed
+      // to be killed with "Runtime.OutOfMemory" at exactly 1024MB after ~4
+      // minutes (the `aws lambda invoke` call itself still reports job
+      // "success" since the CLI received a response, just one carrying
+      // errorType=Runtime.OutOfMemory). The embedding read path was also
+      // switched to float32 numpy arrays (~8x smaller than the previous
+      // float64 Python lists) to reduce the dominant memory cost; 2048MB
+      // keeps headroom as the corpus continues to grow. Lambda scales CPU
+      // with memory, so this also speeds up the numpy/msgpack work.
+      memorySize: 2048,
       role: embedderRole,
       environment: commonEnv,
       logRetention: logs.RetentionDays.THREE_MONTHS,

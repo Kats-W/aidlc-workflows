@@ -107,51 +107,80 @@ async def test_cache_ttl_expiry_refreshes() -> None:
     store.scan_all.assert_called_once()  # type: ignore[attr-defined]
 
 
-async def test_s3_cache_hit_skips_dynamo_scan() -> None:
+async def test_ensure_cache_loaded_warms_tmp_for_search() -> None:
+    """ensure_cache_loaded() downloads from S3 → /tmp; search uses /tmp."""
     matrix, meta = build_matrix_and_meta(CORPUS)
     store = _store_with(CORPUS)
     cache_store = _cache_store_with((matrix, meta))
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
-    hits = await s.search([1.0, 0.0, 0.0], top_k=1)
-    assert hits[0].chunk_id == "a"
-    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
-    store.scan_all.assert_not_called()  # type: ignore[attr-defined]
-    # The S3-sourced corpus is persisted to /tmp for subsequent invocations.
+    await s.ensure_cache_loaded()
     assert os.path.exists(CACHE_VECTORS)
     assert os.path.exists(CACHE_META)
+    # Search must use /tmp cache, not call S3 read again or DynamoDB scan.
+    cache_store.read.reset_mock()  # type: ignore[attr-defined]
+    hits = await s.search([1.0, 0.0, 0.0], top_k=1)
+    assert hits[0].chunk_id == "a"
+    cache_store.read.assert_not_called()  # type: ignore[attr-defined]
+    store.scan_all.assert_not_called()  # type: ignore[attr-defined]
 
 
-async def test_s3_cache_missing_returns_empty_corpus() -> None:
+async def test_ensure_cache_loaded_skips_when_tmp_valid() -> None:
+    """If /tmp cache is already valid, ensure_cache_loaded() is a no-op."""
+    matrix, meta = build_matrix_and_meta(CORPUS)
+    store = _store_with(CORPUS)
+    cache_store = _cache_store_with((matrix, meta))
+    s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    await s.ensure_cache_loaded()
+    cache_store.read.reset_mock()  # type: ignore[attr-defined]
+    await s.ensure_cache_loaded()
+    cache_store.read.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_ensure_cache_loaded_handles_s3_missing() -> None:
+    """S3 cache not found → ensure_cache_loaded logs warning, search returns empty."""
     store = _store_with(CORPUS)
     cache_store = _cache_store_with(ObjectNotFoundError("not built yet"))
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    await s.ensure_cache_loaded()
+    assert not os.path.exists(CACHE_VECTORS)
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
     assert hits == []
-    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
     store.scan_all.assert_not_called()  # type: ignore[attr-defined]
 
 
-async def test_s3_cache_row_mismatch_returns_empty_corpus() -> None:
+async def test_ensure_cache_loaded_handles_row_mismatch() -> None:
+    """Row mismatch in S3 cache → not written to /tmp, search returns empty."""
     matrix, meta = build_matrix_and_meta(CORPUS)
-    # Simulate a read racing with an in-progress EmbedderLambda rebuild: the
-    # vectors object reflects one snapshot, the meta object another.
     mismatched = (matrix, meta[:-1])
     store = _store_with(CORPUS)
     cache_store = _cache_store_with(mismatched)
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    await s.ensure_cache_loaded()
+    assert not os.path.exists(CACHE_VECTORS)
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
     assert hits == []
-    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
     store.scan_all.assert_not_called()  # type: ignore[attr-defined]
 
 
-async def test_s3_cache_access_error_returns_empty_corpus() -> None:
+async def test_ensure_cache_loaded_handles_s3_error() -> None:
+    """S3 access error → ensure_cache_loaded logs warning, search returns empty."""
     store = _store_with(CORPUS)
     cache_store = _cache_store_with(S3AccessError("boom"))
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    await s.ensure_cache_loaded()
+    assert not os.path.exists(CACHE_VECTORS)
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
     assert hits == []
-    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
+    store.scan_all.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_search_without_cache_warm_returns_empty_when_s3_configured() -> None:
+    """If ensure_cache_loaded wasn't called, search returns empty (not slow scan)."""
+    store = _store_with(CORPUS)
+    cache_store = _cache_store_with((np.empty((0, 0)), []))
+    s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
+    hits = await s.search([1.0, 0.0, 0.0], top_k=1)
+    assert hits == []
     store.scan_all.assert_not_called()  # type: ignore[attr-defined]
 
 
