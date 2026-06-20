@@ -137,6 +137,25 @@ async def _rag_pipeline(
     return {"answer": answer, "sources": sources, "hit": True}
 
 
+_searcher_singleton: CosineSimilaritySearcher | None = None
+
+
+async def _ensure_cache_warmed() -> None:
+    """Download the S3 vector cache to ``/tmp`` on cold start.
+
+    Runs *outside* the pipeline timeout so the download completes in
+    full (~15-20 s for 877 MB). Connect will time out on the first
+    cold-start call, but subsequent warm invocations find ``/tmp``
+    ready and respond within the 6 s budget.
+    """
+    global _searcher_singleton
+    if _searcher_singleton is None:
+        bucket = os.environ.get("CRAWL_CONTENT_BUCKET")
+        cache_store = VectorCacheS3Store(bucket=bucket) if bucket else None
+        _searcher_singleton = CosineSimilaritySearcher(VectorStore(), cache_store)
+    await _searcher_singleton.ensure_cache_loaded()
+
+
 async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Connect contact-flow entry point.
 
@@ -152,13 +171,14 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         logger.warning("empty userInput", extra={"contact_id": contact_id})
         return {"answer": FALLBACK_ANSWER, "sources": [], "hit": False}
 
+    await _ensure_cache_warmed()
+
     try:
         return await asyncio.wait_for(
             _rag_pipeline(customer_id, user_input, channel, contact_id),
             timeout=PIPELINE_BUDGET_SECONDS,
         )
     except TimeoutError as exc:
-        # asyncio.TimeoutError -> normalize to the domain error, then fall back.
         budget = TimeoutBudgetExceeded("RAG pipeline exceeded 6s budget")
         logger.warning("rag timeout", extra={"code": budget.code, "error": str(exc)})
         return {"answer": FALLBACK_ANSWER, "sources": [], "hit": False}

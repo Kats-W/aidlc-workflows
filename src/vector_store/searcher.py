@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 from aws_lambda_powertools import Logger
 
-from src.common.errors import ObjectNotFoundError, S3AccessError, SearchError
+from src.common.errors import SearchError
 from src.vector_store.store import VectorStore
 from src.vector_store.vector_cache_store import VectorCacheS3Store, build_matrix_and_meta
 
@@ -102,43 +102,37 @@ class CosineSimilaritySearcher:
                 logger.warning("vector cache load failed, refreshing", extra={"error": str(exc)})
 
         if self._cache_store is not None:
-            # The download thread (asyncio.to_thread) survives coroutine
-            # cancellation by the pipeline timeout. The on_loaded callback
-            # writes to /tmp inside the thread, so even when the pipeline
-            # times out, the thread eventually finishes and /tmp is warm
-            # for the next invocation.
-            def _persist(m: np.ndarray, mt: list[dict[str, Any]]) -> None:
-                if m.shape[0] == len(mt):
-                    self._write_cache(m, mt)
-
-            try:
-                matrix, meta = await self._cache_store.read(
-                    on_loaded=_persist,
-                )
-            except ObjectNotFoundError:
-                logger.info("s3 vector cache not found, returning empty corpus")
-                return np.empty((0, 0), dtype=np.float64), []
-            except S3AccessError as exc:
-                logger.warning(
-                    "s3 vector cache read failed, returning empty corpus",
-                    extra={"error": str(exc)},
-                )
-                return np.empty((0, 0), dtype=np.float64), []
-            else:
-                if matrix.shape[0] == len(meta):
-                    logger.info("vector cache loaded from s3", extra={"rows": len(meta)})
-                    self._write_cache(matrix, meta)
-                    return matrix, meta
-                logger.warning(
-                    "vector cache row mismatch, returning empty corpus",
-                    extra={"matrix_rows": int(matrix.shape[0]), "meta_rows": len(meta)},
-                )
-                return np.empty((0, 0), dtype=np.float64), []
+            # When the handler calls ensure_cache_loaded() before the timed
+            # pipeline, this branch is only reached if the /tmp cache is stale
+            # or ensure_cache_loaded() wasn't called. Fall through to DynamoDB
+            # scan would be too slow, so return empty and let the fallback
+            # answer handle it.
+            logger.info("s3 vector cache not in /tmp, returning empty corpus")
+            return np.empty((0, 0), dtype=np.float64), []
 
         items = await self._store.scan_all()
         matrix, meta = build_matrix_and_meta(items)
         self._write_cache(matrix, meta)
         return matrix, meta
+
+    async def ensure_cache_loaded(self) -> None:
+        """Download the S3 vector cache to ``/tmp`` if not already present.
+
+        Call this *outside* the pipeline timeout so the download runs to
+        completion on cold start (~15-20 s). Subsequent warm invocations
+        find ``/tmp`` valid and skip this entirely.
+        """
+        if self._is_cache_valid() or self._cache_store is None:
+            return
+        try:
+            matrix, meta = await self._cache_store.read()
+            if matrix.shape[0] == len(meta):
+                self._write_cache(matrix, meta)
+                logger.info("cache pre-warmed to /tmp", extra={"rows": len(meta)})
+            else:
+                logger.warning("cache pre-warm row mismatch")
+        except Exception as exc:
+            logger.warning("cache pre-warm failed", extra={"error": str(exc)})
 
     def _is_cache_valid(self) -> bool:
         """Return True when all cache files exist and are within the TTL."""
