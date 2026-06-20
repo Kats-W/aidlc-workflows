@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+from collections.abc import Callable
 from typing import Any
 
 import boto3
@@ -77,36 +78,43 @@ class VectorCacheS3Store:
         await asyncio.to_thread(_write)
         logger.info("vector cache written to s3", extra={"rows": len(meta)})
 
-    def read_sync(self) -> tuple[np.ndarray, list[dict[str, Any]]]:
-        """Download and parse the combined corpus (synchronous).
-
-        Raises:
-            ObjectNotFoundError: If the cache has not been built yet.
-            S3AccessError: On any other S3 failure.
-        """
-        try:
-            obj = self._client.get_object(Bucket=self._bucket, Key=CACHE_KEY)
-            body = obj["Body"].read()
-        except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code", "")
-            if code in ("NoSuchKey", "404"):
-                raise ObjectNotFoundError("vector cache not found in s3") from exc
-            raise S3AccessError(f"failed to read vector cache: {exc}") from exc
-
-        unpacked = msgpack.unpackb(body, raw=False)
-        del body
-        vectors_bytes = unpacked["vectors"]
-        meta: list[dict[str, Any]] = unpacked["meta"]
-        del unpacked
-        matrix = np.load(io.BytesIO(vectors_bytes))
-        del vectors_bytes
-        return matrix, meta
-
-    async def read(self) -> tuple[np.ndarray, list[dict[str, Any]]]:
+    async def read(
+        self,
+        on_loaded: Callable[[np.ndarray, list[dict[str, Any]]], None] | None = None,
+    ) -> tuple[np.ndarray, list[dict[str, Any]]]:
         """Download and parse the combined corpus matrix + metadata.
 
+        Args:
+            on_loaded: Optional callback invoked inside the download thread
+                after a successful parse. Because ``asyncio.to_thread``
+                threads survive coroutine cancellation, this guarantees
+                the callback fires even when the pipeline timeout cancels
+                the awaiting coroutine — useful for persisting to ``/tmp``.
+
         Raises:
             ObjectNotFoundError: If the cache has not been built yet.
             S3AccessError: On any other S3 failure.
         """
-        return await asyncio.to_thread(self.read_sync)
+
+        def _read() -> tuple[np.ndarray, list[dict[str, Any]]]:
+            try:
+                obj = self._client.get_object(Bucket=self._bucket, Key=CACHE_KEY)
+                body = obj["Body"].read()
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code in ("NoSuchKey", "404"):
+                    raise ObjectNotFoundError("vector cache not found in s3") from exc
+                raise S3AccessError(f"failed to read vector cache: {exc}") from exc
+
+            unpacked = msgpack.unpackb(body, raw=False)
+            del body
+            vectors_bytes = unpacked["vectors"]
+            meta: list[dict[str, Any]] = unpacked["meta"]
+            del unpacked
+            matrix = np.load(io.BytesIO(vectors_bytes))
+            del vectors_bytes
+            if on_loaded is not None:
+                on_loaded(matrix, meta)
+            return matrix, meta
+
+        return await asyncio.to_thread(_read)

@@ -101,7 +101,7 @@ export class ConversationStack extends cdk.Stack {
       code,
       layers: [pythonDepsLayer],
       timeout: cdk.Duration.seconds(90),
-      memorySize: 3072,
+      memorySize: 4096,
       ephemeralStorageSize: cdk.Size.mebibytes(1536),
       role: ragRole,
       environment: commonEnv,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest
@@ -35,12 +35,12 @@ def _store_with(items: list[dict]) -> object:
 
 
 def _cache_store_with(read_result: object) -> object:
-    """Build a fake :class:`VectorCacheS3Store` whose ``read_sync`` returns or raises."""
+    """Build a fake :class:`VectorCacheS3Store` whose ``read`` returns or raises."""
     cache_store = type("CS", (), {})()
     if isinstance(read_result, BaseException):
-        cache_store.read_sync = Mock(side_effect=read_result)  # type: ignore[attr-defined]
+        cache_store.read = AsyncMock(side_effect=read_result)  # type: ignore[attr-defined]
     else:
-        cache_store.read_sync = Mock(return_value=read_result)  # type: ignore[attr-defined]
+        cache_store.read = AsyncMock(return_value=read_result)  # type: ignore[attr-defined]
     return cache_store
 
 
@@ -112,22 +112,13 @@ async def test_s3_cache_hit_skips_dynamo_scan() -> None:
     store = _store_with(CORPUS)
     cache_store = _cache_store_with((matrix, meta))
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
-    # First search triggers background preload; returns empty (no /tmp yet).
-    hits = await s.search([1.0, 0.0, 0.0], top_k=1)
-    assert hits == []
-    store.scan_all.assert_not_called()  # type: ignore[attr-defined]
-    # Wait for background thread to write /tmp cache.
-    if s._preload_thread:
-        s._preload_thread.join(timeout=5)
-    assert os.path.exists(CACHE_VECTORS)
-    assert os.path.exists(CACHE_META)
-    with open(CACHE_META, encoding="utf-8") as fh:
-        cached_meta = json.load(fh)
-    assert cached_meta[0]["chunkId"] == "a"
-    # Second search uses /tmp cache and returns real results.
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
     assert hits[0].chunk_id == "a"
+    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
     store.scan_all.assert_not_called()  # type: ignore[attr-defined]
+    # The S3-sourced corpus is persisted to /tmp for subsequent invocations.
+    assert os.path.exists(CACHE_VECTORS)
+    assert os.path.exists(CACHE_META)
 
 
 async def test_s3_cache_missing_returns_empty_corpus() -> None:
@@ -136,23 +127,22 @@ async def test_s3_cache_missing_returns_empty_corpus() -> None:
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
     assert hits == []
+    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
     store.scan_all.assert_not_called()  # type: ignore[attr-defined]
-    if s._preload_thread:
-        s._preload_thread.join(timeout=5)
 
 
 async def test_s3_cache_row_mismatch_returns_empty_corpus() -> None:
     matrix, meta = build_matrix_and_meta(CORPUS)
+    # Simulate a read racing with an in-progress EmbedderLambda rebuild: the
+    # vectors object reflects one snapshot, the meta object another.
     mismatched = (matrix, meta[:-1])
     store = _store_with(CORPUS)
     cache_store = _cache_store_with(mismatched)
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
     assert hits == []
+    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
     store.scan_all.assert_not_called()  # type: ignore[attr-defined]
-    if s._preload_thread:
-        s._preload_thread.join(timeout=5)
-    assert not os.path.exists(CACHE_VECTORS)
 
 
 async def test_s3_cache_access_error_returns_empty_corpus() -> None:
@@ -161,9 +151,8 @@ async def test_s3_cache_access_error_returns_empty_corpus() -> None:
     s = CosineSimilaritySearcher(store, cache_store)  # type: ignore[arg-type]
     hits = await s.search([1.0, 0.0, 0.0], top_k=1)
     assert hits == []
+    cache_store.read.assert_called_once()  # type: ignore[attr-defined]
     store.scan_all.assert_not_called()  # type: ignore[attr-defined]
-    if s._preload_thread:
-        s._preload_thread.join(timeout=5)
 
 
 def test_cosine_self_similarity_is_one() -> None:
