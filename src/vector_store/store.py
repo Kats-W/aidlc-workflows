@@ -159,5 +159,6 @@ class VectorStore:
             *[asyncio.to_thread(_scan_segment, seg) for seg in range(self._PARALLEL_SCAN_SEGMENTS)]
         )
         items = [item for segment in segment_results for item in segment]
-        logger.info("scanned vectors", extra={"count": len(items), "segments": self._PARALLEL_SCAN_SEGMENTS})
+        segs = self._PARALLEL_SCAN_SEGMENTS
+        logger.info("scanned vectors", extra={"count": len(items), "segments": segs})
         return items
