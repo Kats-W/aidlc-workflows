@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -102,38 +103,15 @@ class CosineSimilaritySearcher:
                 logger.warning("vector cache load failed, refreshing", extra={"error": str(exc)})
 
         if self._cache_store is not None:
-            # The download thread (asyncio.to_thread) survives coroutine
-            # cancellation. Pass _write_cache as on_loaded so the thread
-            # persists the result to /tmp even when the pipeline timeout
-            # cancels this coroutine mid-download — subsequent warm
-            # invocations then hit the fast /tmp path above.
-            def _persist(m: np.ndarray, mt: list[dict[str, Any]]) -> None:
-                if m.shape[0] == len(mt):
-                    self._write_cache(m, mt)
-
-            try:
-                matrix, meta = await self._cache_store.read(
-                    on_loaded=_persist,
-                )
-            except ObjectNotFoundError:
-                logger.info("s3 vector cache not found, returning empty corpus")
-                return np.empty((0, 0), dtype=np.float64), []
-            except S3AccessError as exc:
-                logger.warning(
-                    "s3 vector cache read failed, returning empty corpus",
-                    extra={"error": str(exc)},
-                )
-                return np.empty((0, 0), dtype=np.float64), []
-            else:
-                if matrix.shape[0] == len(meta):
-                    logger.info("vector cache loaded from s3", extra={"rows": len(meta)})
-                    self._write_cache(matrix, meta)
-                    return matrix, meta
-                logger.warning(
-                    "vector cache row mismatch, returning empty corpus",
-                    extra={"matrix_rows": int(matrix.shape[0]), "meta_rows": len(meta)},
-                )
-                return np.empty((0, 0), dtype=np.float64), []
+            # Cold start: the S3 download (~15s for the full corpus) exceeds
+            # the 6s pipeline budget. Start a detached daemon thread that
+            # downloads and writes to /tmp, then return empty corpus for this
+            # request. The thread releases all memory when it completes
+            # (no dangling asyncio Future pinning the ~1 GB matrix+meta).
+            # The next warm invocation hits the /tmp fast path above.
+            self._ensure_preload_started()
+            logger.info("s3 vector cache cold start, preloading in background")
+            return np.empty((0, 0), dtype=np.float64), []
 
         items = await self._store.scan_all()
         matrix, meta = build_matrix_and_meta(items)
@@ -166,6 +144,33 @@ class CosineSimilaritySearcher:
         except OSError as exc:
             # A cache write failure must not break search; just log it.
             logger.warning("failed to write vector cache", extra={"error": str(exc)})
+
+    _preload_thread: threading.Thread | None = None
+
+    def _ensure_preload_started(self) -> None:
+        """Start a background thread to download the S3 cache to /tmp."""
+        if self._preload_thread and self._preload_thread.is_alive():
+            return
+        self._preload_thread = threading.Thread(
+            target=self._background_download, daemon=True,
+        )
+        self._preload_thread.start()
+
+    def _background_download(self) -> None:
+        """Download the S3 vector cache and persist to /tmp (runs in a thread)."""
+        try:
+            assert self._cache_store is not None
+            matrix, meta = self._cache_store.read_sync()
+            if matrix.shape[0] == len(meta):
+                self._write_cache(matrix, meta)
+                logger.info("cache preloaded to /tmp", extra={"rows": len(meta)})
+            else:
+                logger.warning("cache preload row mismatch", extra={
+                    "matrix_rows": int(matrix.shape[0]),
+                    "meta_rows": len(meta),
+                })
+        except Exception as exc:
+            logger.warning("cache preload failed", extra={"error": str(exc)})
 
     @staticmethod
     def _cosine_scores(matrix: np.ndarray, query: np.ndarray) -> np.ndarray:
