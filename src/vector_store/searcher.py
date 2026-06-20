@@ -107,9 +107,9 @@ class CosineSimilaritySearcher:
             # persists the result to /tmp even when the pipeline timeout
             # cancels this coroutine mid-download — subsequent warm
             # invocations then hit the fast /tmp path above.
-            def _persist(m: np.ndarray, meta: list[dict[str, Any]]) -> None:
-                if m.shape[0] == len(meta):
-                    self._write_cache(m, meta)
+            def _persist(m: np.ndarray, mt: list[dict[str, Any]]) -> None:
+                if m.shape[0] == len(mt):
+                    self._write_cache(m, mt)
 
             try:
                 matrix, meta = await self._cache_store.read(
@@ -127,6 +127,7 @@ class CosineSimilaritySearcher:
             else:
                 if matrix.shape[0] == len(meta):
                     logger.info("vector cache loaded from s3", extra={"rows": len(meta)})
+                    self._write_cache(matrix, meta)
                     return matrix, meta
                 logger.warning(
                     "vector cache row mismatch, returning empty corpus",

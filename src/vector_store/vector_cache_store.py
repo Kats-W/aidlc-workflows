@@ -108,8 +108,12 @@ class VectorCacheS3Store:
                 raise S3AccessError(f"failed to read vector cache: {exc}") from exc
 
             unpacked = msgpack.unpackb(body, raw=False)
-            matrix = np.load(io.BytesIO(unpacked["vectors"]))
+            del body
+            vectors_bytes = unpacked["vectors"]
             meta: list[dict[str, Any]] = unpacked["meta"]
+            del unpacked
+            matrix = np.load(io.BytesIO(vectors_bytes))
+            del vectors_bytes
             if on_loaded is not None:
                 on_loaded(matrix, meta)
             return matrix, meta
