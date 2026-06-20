@@ -102,19 +102,19 @@ class CosineSimilaritySearcher:
                 logger.warning("vector cache load failed, refreshing", extra={"error": str(exc)})
 
         if self._cache_store is not None:
-            # When an S3 cache is configured (production), a full DynamoDB
-            # ``scan_all()`` is no longer an acceptable fallback: at corpus
-            # scale (thousands of items x 1024-dim embeddings) the scan runs
-            # as a background thread via ``asyncio.to_thread``, and even
-            # though the RAG pipeline's own timeout fires and returns a
-            # fallback answer, ``asyncio.run()`` blocks on that thread during
-            # interpreter shutdown — so the Lambda still hits its hard 30s
-            # sandbox timeout and the caller gets no response at all. Treat
-            # any S3 cache miss/failure as an empty corpus instead: the
-            # caller gets a fast "no usable hits" fallback answer, and the
-            # next successful EmbedderLambda rebuild restores real results.
+            # The download thread (asyncio.to_thread) survives coroutine
+            # cancellation. Pass _write_cache as on_loaded so the thread
+            # persists the result to /tmp even when the pipeline timeout
+            # cancels this coroutine mid-download — subsequent warm
+            # invocations then hit the fast /tmp path above.
+            def _persist(m: np.ndarray, meta: list[dict[str, Any]]) -> None:
+                if m.shape[0] == len(meta):
+                    self._write_cache(m, meta)
+
             try:
-                matrix, meta = await self._cache_store.read()
+                matrix, meta = await self._cache_store.read(
+                    on_loaded=_persist,
+                )
             except ObjectNotFoundError:
                 logger.info("s3 vector cache not found, returning empty corpus")
                 return np.empty((0, 0), dtype=np.float64), []
@@ -127,7 +127,6 @@ class CosineSimilaritySearcher:
             else:
                 if matrix.shape[0] == len(meta):
                     logger.info("vector cache loaded from s3", extra={"rows": len(meta)})
-                    self._write_cache(matrix, meta)
                     return matrix, meta
                 logger.warning(
                     "vector cache row mismatch, returning empty corpus",

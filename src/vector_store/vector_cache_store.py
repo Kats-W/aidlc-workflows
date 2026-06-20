@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+from collections.abc import Callable
 from typing import Any
 
 import boto3
@@ -77,8 +78,19 @@ class VectorCacheS3Store:
         await asyncio.to_thread(_write)
         logger.info("vector cache written to s3", extra={"rows": len(meta)})
 
-    async def read(self) -> tuple[np.ndarray, list[dict[str, Any]]]:
+    async def read(
+        self,
+        on_loaded: Callable[[np.ndarray, list[dict[str, Any]]], None] | None = None,
+    ) -> tuple[np.ndarray, list[dict[str, Any]]]:
         """Download and parse the combined corpus matrix + metadata.
+
+        Args:
+            on_loaded: Optional callback invoked inside the download thread
+                after a successful parse, *before* the result is returned.
+                Because ``asyncio.to_thread`` threads survive coroutine
+                cancellation, this guarantees the callback fires even when
+                the awaiting coroutine is cancelled by a timeout — useful
+                for persisting the result to ``/tmp`` on first load.
 
         Raises:
             ObjectNotFoundError: If the cache has not been built yet.
@@ -98,6 +110,8 @@ class VectorCacheS3Store:
             unpacked = msgpack.unpackb(body, raw=False)
             matrix = np.load(io.BytesIO(unpacked["vectors"]))
             meta: list[dict[str, Any]] = unpacked["meta"]
+            if on_loaded is not None:
+                on_loaded(matrix, meta)
             return matrix, meta
 
         return await asyncio.to_thread(_read)
