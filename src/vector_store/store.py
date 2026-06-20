@@ -108,22 +108,15 @@ class VectorStore:
         await asyncio.to_thread(_delete)
         logger.debug("deleted vector", extra={"chunk_id": chunk_id})
 
+    _PARALLEL_SCAN_SEGMENTS: int = 8
+
     async def scan_all(self) -> list[dict[str, Any]]:
         """Scan every item, returning embedding/text/sourceUrl/chunkId.
 
         Uses the low-level DynamoDB client with a :class:`_FloatDeserializer`
         so embedding Numbers deserialize directly to ``float`` instead of
-        ``Decimal``. For the full corpus (~5.8M numbers) this avoids
-        materializing millions of short-lived ``Decimal`` objects at once,
-        which previously pegged the Lambda at its memory limit and caused GC
-        thrashing / timeouts during the cache rebuild.
-
-        Each embedding is additionally converted to a ``float32`` numpy array
-        as soon as it is deserialized. A 1024-element Python ``list[float]``
-        costs ~33KB (24 bytes/float object + 8 bytes/pointer), while the
-        equivalent ``float32`` ndarray costs ~4KB — an ~8x reduction. At
-        corpus scale (tens of thousands of chunks) this is the difference
-        between the scan completing and the Lambda being OOM-killed mid-scan.
+        ``Decimal``, and a parallel scan (8 segments) to stay within the
+        Lambda timeout at corpus scale (100K+ items).
         """
 
         deserializer = _FloatDeserializer()
@@ -131,13 +124,15 @@ class VectorStore:
         def _deser(attr: Any | None) -> Any:
             return deserializer.deserialize(attr) if attr is not None else None
 
-        def _scan() -> list[dict[str, Any]]:
+        def _scan_segment(segment: int) -> list[dict[str, Any]]:
             items: list[dict[str, Any]] = []
             try:
                 kwargs: dict[str, Any] = {
                     "TableName": self._table_name,
                     "ProjectionExpression": "chunkId, sourceUrl, #t, embedding",
                     "ExpressionAttributeNames": {"#t": "text"},
+                    "Segment": segment,
+                    "TotalSegments": self._PARALLEL_SCAN_SEGMENTS,
                 }
                 while True:
                     response = self._client.scan(**kwargs)
@@ -157,9 +152,12 @@ class VectorStore:
                         break
                     kwargs["ExclusiveStartKey"] = last_key
             except ClientError as exc:
-                raise DynamoAccessError("failed to scan VectorStore") from exc
+                raise DynamoAccessError(f"failed to scan VectorStore segment {segment}") from exc
             return items
 
-        items = await asyncio.to_thread(_scan)
-        logger.debug("scanned vectors", extra={"count": len(items)})
+        segment_results = await asyncio.gather(
+            *[asyncio.to_thread(_scan_segment, seg) for seg in range(self._PARALLEL_SCAN_SEGMENTS)]
+        )
+        items = [item for segment in segment_results for item in segment]
+        logger.info("scanned vectors", extra={"count": len(items), "segments": self._PARALLEL_SCAN_SEGMENTS})
         return items
