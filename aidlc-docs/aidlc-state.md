@@ -310,4 +310,57 @@
       (1) S3AccessErrorが解消したか（または error_code から根本原因を
       特定できるか）、(2) remaining_queue が単調減少して最終的に
       1サイクル完了（queue空→新サイクルでvisitedリセット）することを確認
+- [x] PR #50: BFS state ロード/セーブ失敗時のフォールバック修正
+      （_load_state ヘルパー追加、state_store に構造化エラーログ）
+- [x] PR #51: クローラーに s3:ListBucket 権限追加（crawl-content バケット）
+- [x] PR #52: check-embedder.yml 改善（最新5ストリーム + timeout/REPORT行表示）
+- [x] PR #53: Embedder の vector-cache リビルドを最終バッチのみに制限
+      （rebuildCache フラグ導入、CrawlerLambda が最終バッチにのみ設定）
+- [x] PR #54: EmbedderLambda タイムアウトを10分に延長（キャッシュリビルド対応）
+- [x] PR #55: EmbedderLambda の Decimal 読み込みパスを排除
+      （_FloatDeserializer で DynamoDB Number → float 直接変換、
+      Decimal 中間オブジェクトによる GC スラッシング回避）
+- [x] PR #56: sample-crawl-content.yml 診断ワークフロー追加
+      （S3 から crawl 済みチャンクのサンプルを取得して内容確認）
+- [x] PR #57-58: sample-crawl-content.yml の S3 エラーハンドリング改善
+- [x] PR #59: クローラーで non-HTML レスポンス（PDF等）をスキップ
+      （Content-Type チェック追加、BeautifulSoup が PDF バイナリを
+      テキスト化して大量の無意味チャンクを生成する問題を回避）
+- [x] PR #60-61: sample-crawl-content ワークフローの改善（ハッシュ指定対応等）
+- [x] PR #62: SharedInfra VPC から未使用 NAT Gateway を削除（コスト削減）
+- [x] PR #63: S3 vector cache の行数不一致ハンドリング（並行リビルド対策）
+- [x] PR #64: vector cache を単一 atomic S3 オブジェクトとして保存
+- [x] PR #65: RagHandler の S3 vector cache 未構築時タイムアウト回避
+      （ObjectNotFoundError 時に空 corpus を返す設計に変更）
+- [x] PR #66: RagHandlerLambda に s3:ListBucket 権限追加（vector-cache prefix）
+- [x] EmbedderLambda OOM 問題の調査・対策（PR #67-71）:
+      - 問題: 129,811 アイテム × 1024 次元の全件スキャン + キャッシュリビルドで
+        Lambda が OOM（cgroup kill、サイレント失敗）
+      - PR #67: EmbedderLambda メモリ増量 + タイムアウト延長
+      - PR #68: キャッシュ書き込みのメモリ最適化（write path）
+      - PR #69: vector cache メタデータから text を除外
+        （text は DynamoDB BatchGetItem でクエリ時に取得する方式に変更）
+        - VectorStore.batch_get_texts() 追加
+        - CosineSimilaritySearcher.search() で top-k hit の text を
+          batch_get_texts で取得するよう変更
+      - PR #70: scan_all の ProjectionExpression から text を除外
+        （~323 MB のメモリ節約）
+      - PR #71: msgpack.pack → numpy.save + json.dump に置換
+        （msgpack の内部バッファ倍増で 1,525 MB の追加メモリ確認済み、
+        numpy.save/json.dump は追加メモリ 0 MB）
+        - CloudWatch REPORT で確認: Duration 838s, Max Memory 2,022 MB / 3,072 MB
+        - S3 キャッシュ形式: matrix.npy + meta.json（2ファイル構成）
+- [x] PR #72: インクリメンタルキャッシュ更新に移行
+      - 問題: full scan が 836秒（全体の99.3%）を占め、corpus 2-3倍で
+        Lambda 15分上限を超過するスケーラビリティリスク
+      - CloudWatch タイムスタンプ分析で内訳を確認:
+        DynamoDB scan 836秒(99.3%) / matrix構築+S3 write 6秒(0.7%)
+      - 対策: full scan + 全体リビルド → S3 インクリメンタルパッチに変更
+        - VectorCacheS3Store.patch() 追加: 既存キャッシュを GET →
+          upsert/delete の差分を適用 → PUT
+        - 処理量が O(batch size) で corpus サイズに依存しない
+        - rebuildCache フラグを廃止、各バッチが自分の差分を直接反映
+        - CrawlerLambda から rebuildCache 関連コード削除
+        - run-embedder.yml: cli-read-timeout を 920s → 120s に短縮
+        - テスト更新: patch の create/append/replace/delete/combined テスト追加
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）

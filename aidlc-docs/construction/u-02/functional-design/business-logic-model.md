@@ -73,19 +73,24 @@ CosineSimilaritySearcher.search(query_vec, top_k)
         │
         ├─ _load_vectors()
         │     ├─ /tmp キャッシュ有効（TTL 900s 以内）? → .npy + JSON をロード
-        │     └─ 無効 → VectorStore.scan_all() → matrix 構築 → /tmp に保存
+        │     ├─ 無効 + S3 キャッシュあり → S3 から matrix.npy + meta.json DL → /tmp 保存
+        │     └─ S3 未構築 → VectorStore.scan_all() → matrix 構築 → /tmp に保存
         │
         ├─ _cosine_top_k(matrix, query, k)   ← numpy ベクトル演算
         │     scores = (matrix @ query) / (‖row‖ · ‖query‖)
         │     argpartition で top-k → 降順ソート
         │
+        ├─ VectorStore.batch_get_texts(chunk_ids)  ← top-k の text を DynamoDB から取得
+        │
         ▼
    list[SearchHit]  (chunk_id, source_url, text, score)
 ```
 
-- キャッシュは numpy `.npy`（行列）+ JSON（メタ）+ timestamp テキストの 3 ファイル。
-- pickle は使用しない（セキュリティ要件）。
-- Lambda ウォームスタート間は /tmp を再利用し、DynamoDB 全件スキャンを回避。
+- S3 キャッシュは numpy `.npy`（embedding 行列）+ JSON（chunkId + sourceUrl のみ、text なし）の 2 ファイル。
+- text はキャッシュに含めず、top-k hit の text のみ DynamoDB BatchGetItem で取得（メモリ効率）。
+- /tmp キャッシュは .npy + JSON + timestamp の 3 ファイル。pickle は使用しない（セキュリティ要件）。
+- Lambda ウォームスタート間は /tmp を再利用し、S3 ダウンロードも回避。
+- EmbedderLambda は各バッチで S3 キャッシュをインクリメンタルに更新（O(batch size)、full scan 不要）。
 
 ---
 
