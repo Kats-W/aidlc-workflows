@@ -12,7 +12,8 @@
 | 埋め込みモデル | Titan Embeddings v2 (`amazon.titan-embed-text-v2:0`, 1024d) | OpenAI embeddings | `openai` 禁止、Bedrock ネイティブ |
 | ベクトル演算 | `numpy` | `pinecone`, `faiss` | `pinecone-client` 禁止。コーパス規模が小さく numpy で十分 |
 | ベクトルストア | DynamoDB (VectorStore) | Pinecone, OpenSearch | SharedInfra で provisioning 済み、運用統一 |
-| キャッシュ形式 | numpy `.npy` + JSON | **pickle（禁止）**, msgpack | セキュリティ要件（任意コード実行回避） |
+| キャッシュ形式 | numpy `.npy` + JSON | **pickle（禁止）**, msgpack | セキュリティ要件（任意コード実行回避）。msgpack は内部バッファ倍増で OOM の原因となるため不採用 |
+| キャッシュ更新 | インクリメンタルパッチ（O(batch)） | フルリビルド（O(corpus)） | corpus 規模に依存しないスケーラビリティ確保 |
 | LLM フレームワーク | なし（直接 SDK） | `langchain` | `langchain` 禁止、薄い自前実装で制御性確保 |
 | ログ | `aws-lambda-powertools` Logger | print, logging 直 | 構造化 JSON ログの標準化 |
 | AWS SDK | `boto3`（`asyncio.to_thread` でオフロード） | aioboto3 全面採用 | boto3 は安定。非同期化は to_thread で達成 |

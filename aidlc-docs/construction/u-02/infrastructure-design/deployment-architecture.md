@@ -32,11 +32,14 @@ Scheduler ──(Sun 02:00 JST)──▶ CrawlerLambda
                                    ├─▶ ContentDiff (diff + commit)
                                    └─(Event Invoke)─▶ EmbedderLambda
                                                           │ Titan v2 embed
-                                                          └─▶ VectorStore (upsert/delete)
+                                                          ├─▶ VectorStore (upsert/delete)
+                                                          └─▶ S3 vector-cache patch (incremental)
 
 [検索パス] U-03 ChatLambda ─▶ CosineSimilaritySearcher
                                    ├─ /tmp cache (.npy + JSON, TTL 900s)
-                                   └─ miss → VectorStore.scan_all()
+                                   ├─ miss → S3 vector-cache (matrix.npy + meta.json)
+                                   ├─ batch_get_texts → VectorStore (top-k text)
+                                   └─ S3 未構築 → VectorStore.scan_all() (fallback)
 ```
 
 ---

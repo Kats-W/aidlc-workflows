@@ -2,6 +2,60 @@
 
 ---
 
+## Operations Phase — EmbedderLambda OOM 解消 + インクリメンタルキャッシュ
+
+**Timestamp**: 2026-06-21T21:00:00Z
+**User Input**: EmbedderLambda の OOM 問題の根本対処、およびスケーラビリティ確保を要求。
+**AI Response**: EmbedderLambda の vector cache リビルド時 OOM を調査・修正し、最終的にインクリメンタルキャッシュ更新方式に移行した。
+
+**PR #53 — rebuildCache フラグ導入**:
+全バッチでキャッシュリビルドが走りタイムアウトしていた問題を修正。CrawlerLambda が最終バッチにのみ `rebuildCache=true` を設定する方式に変更。
+
+**PR #54-55 — EmbedderLambda タイムアウト延長 + Decimal 排除**:
+タイムアウトを10分に延長。`_FloatDeserializer` で DynamoDB Number → float 直接変換に変更し、Decimal 中間オブジェクトによる GC スラッシング（~5.8M 個の Decimal オブジェクト）を回避。
+
+**PR #59 — non-HTML レスポンスのスキップ**:
+クローラーが PDF 等の非 HTML レスポンスを BeautifulSoup で処理し、大量の無意味チャンクを生成していた問題を修正。Content-Type チェックを追加。
+
+**PR #62 — NAT Gateway 削除（コスト削減）**:
+SharedInfra VPC の未使用 NAT Gateway を削除。月額コスト削減。
+
+**PR #67-71 — EmbedderLambda OOM 根本対策**:
+129,811 アイテム × 1024 次元の full scan + キャッシュリビルドで Lambda が OOM（cgroup kill、サイレント失敗）する問題を段階的に解決:
+- PR #69: vector cache メタデータから text を除外（text は query 時に BatchGetItem で取得）
+- PR #70: scan_all の ProjectionExpression から text を除外（~323 MB 節約）
+- PR #71: msgpack.pack → numpy.save + json.dump に置換。tracemalloc で msgpack の内部バッファ倍増（1,525 MB 追加）を計測・確認。numpy.save/json.dump は追加メモリ 0 MB。CloudWatch REPORT: Duration 838s, Max Memory 2,022 MB / 3,072 MB で正常完了。
+
+**PR #72 — インクリメンタルキャッシュ更新に移行**:
+CloudWatch タイムスタンプ分析で DynamoDB full scan が 836秒（全体の99.3%）を占めることを確認。corpus 2-3倍でLambda 15分上限を超過するスケーラビリティリスクに対し、full scan + 全体リビルド → S3 インクリメンタルパッチ（O(batch size)）に移行。`rebuildCache` フラグ廃止、各バッチが自分の差分を直接 S3 キャッシュに反映。cli-read-timeout を 920s → 120s に短縮。
+
+**本番稼働確認結果**:
+- EmbedderLambda: OOM 解消（Duration 838s→数秒、Memory 2,022 MB→大幅減の見込み）
+- S3 キャッシュ: matrix.npy + meta.json の2ファイル構成、インクリメンタル更新
+
+**残作業**: CDK デプロイ後に Run Embedder で動作確認
+**Context**: OPERATIONS — EmbedderLambda OOM 解消・インクリメンタルキャッシュ移行完了。
+
+---
+
+## Operations Phase — クローラー改善（URL正規化・BFS永続化・非HTML除外）
+
+**Timestamp**: 2026-06-15T00:00:00Z
+**User Input**: クローラートラップの修正、BFS キュー永続化、各種バグ修正を要求。
+**AI Response**: クローラーの URL 正規化、BFS 永続化、非 HTML スキップ、および関連する IAM/S3 修正を実施。
+
+**PR #48 — クローラートラップ対策**: URL 正規化でホスト別クエリ文字列処理を導入。FAQ ホスト（help.jibunbank.co.jp）は `id` パラメータのみ保持、コーポレートサイトはクエリ文字列を完全除去。remaining_queue が 22,674 → 13,164 に減少。
+
+**PR #49 — BFS キュー/visited 状態の永続化**: CrawlStateStore を追加し S3 に BFS 状態を保存・復元。キュー空で新サイクル開始（再クロールによる差分検出継続）。
+
+**PR #50 — BFS state ロード/セーブのフォールバック修正**: state_store.load() の S3AccessError でハンドラ全体が異常終了するリグレッションを修正。_load_state ヘルパーでフォールバック。
+
+**PR #51 — s3:ListBucket 権限追加**: クローラーの crawl-content バケットへの ListBucket 権限不足を修正。
+
+**Context**: OPERATIONS — クローラー改善完了。
+
+---
+
 ## Operations Phase — クローラー/Embedder 本番稼働確認 COMPLETE
 
 **Timestamp**: 2026-06-09T22:15:00Z
