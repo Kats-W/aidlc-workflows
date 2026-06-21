@@ -31,6 +31,10 @@ def _clean_cache():  # type: ignore[no-untyped-def]
 def _store_with(items: list[dict]) -> object:
     store = type("S", (), {})()
     store.scan_all = AsyncMock(return_value=items)  # type: ignore[attr-defined]
+    texts = {it["chunkId"]: it.get("text", "") for it in items}
+    store.batch_get_texts = AsyncMock(  # type: ignore[attr-defined]
+        side_effect=lambda ids: {cid: texts.get(cid, "") for cid in ids}
+    )
     return store
 
 

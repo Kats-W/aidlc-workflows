@@ -1,11 +1,9 @@
 """S3-backed combined vector cache for the cosine similarity searcher.
 
-:class:`VectorCacheS3Store` persists the *entire* VectorStore corpus (embedding
-matrix + chunk metadata) as a single S3 object. The EmbedderLambda (U-02)
-rebuilds this cache once per crawl cycle (on the final diff batch);
-:class:`CosineSimilaritySearcher`
-(U-03) reads it on a cold ``/tmp`` cache instead of running a full DynamoDB
-``Scan`` on the request path.
+:class:`VectorCacheS3Store` persists the embedding matrix and lightweight
+metadata (chunkId + sourceUrl, **no text**) as a single S3 object.
+Text is fetched from DynamoDB at query time for the top-k hits only,
+keeping the cache small enough to build within the Lambda memory limit.
 """
 
 from __future__ import annotations
@@ -36,7 +34,7 @@ CACHE_KEY: str = "vector-cache/cache.msgpack"
 def build_matrix_and_meta(items: list[dict[str, Any]]) -> tuple[np.ndarray, list[dict[str, Any]]]:
     """Convert :meth:`VectorStore.scan_all` items into a matrix + metadata list."""
     meta = [
-        {"chunkId": it["chunkId"], "sourceUrl": it.get("sourceUrl", ""), "text": it.get("text", "")}
+        {"chunkId": it["chunkId"], "sourceUrl": it.get("sourceUrl", "")}
         for it in items
     ]
     if items:
@@ -64,14 +62,7 @@ class VectorCacheS3Store:
     _TMP_CACHE = "/tmp/cache_build.msgpack"
 
     async def write(self, matrix: np.ndarray, meta: list[dict[str, Any]]) -> None:
-        """Upload the combined corpus matrix + metadata to S3 as one object.
-
-        Serializes via ``msgpack.pack`` (streaming to /tmp) instead of
-        ``msgpack.packb`` (in-memory) so the ~877 MB output never resides
-        in the Lambda heap. The temp file is uploaded with ``upload_file``
-        which streams from disk, keeping peak memory at ~1.3 GB instead
-        of ~2.4 GB.
-        """
+        """Upload the combined corpus matrix + metadata to S3 as one object."""
 
         def _write() -> None:
             try:

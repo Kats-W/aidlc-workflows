@@ -73,7 +73,7 @@ async def test_upsert_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no
         )
     assert result == {"upserted": 1, "deleted": 0}
     meta = _read_cache_meta(s3, BUCKET)
-    assert meta == [{"chunkId": "a#0", "sourceUrl": "https://x/faq", "text": "alpha"}]
+    assert meta == [{"chunkId": "a#0", "sourceUrl": "https://x/faq"}]
 
 
 async def test_delete_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no-untyped-def]

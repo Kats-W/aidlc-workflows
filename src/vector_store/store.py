@@ -108,6 +108,33 @@ class VectorStore:
         await asyncio.to_thread(_delete)
         logger.debug("deleted vector", extra={"chunk_id": chunk_id})
 
+    async def batch_get_texts(self, chunk_ids: list[str]) -> dict[str, str]:
+        """Fetch ``text`` for a small set of chunk IDs via ``BatchGetItem``."""
+
+        if not chunk_ids:
+            return {}
+
+        def _get() -> dict[str, str]:
+            try:
+                response = self._client.batch_get_item(
+                    RequestItems={
+                        self._table_name: {
+                            "Keys": [{"chunkId": {"S": cid}} for cid in chunk_ids],
+                            "ProjectionExpression": "chunkId, #t",
+                            "ExpressionAttributeNames": {"#t": "text"},
+                        }
+                    }
+                )
+            except ClientError as exc:
+                raise DynamoAccessError("failed to batch_get_texts") from exc
+            result: dict[str, str] = {}
+            for item in response.get("Responses", {}).get(self._table_name, []):
+                cid = item["chunkId"]["S"]
+                result[cid] = item.get("text", {}).get("S", "")
+            return result
+
+        return await asyncio.to_thread(_get)
+
     _PARALLEL_SCAN_SEGMENTS: int = 8
 
     async def scan_all(self) -> list[dict[str, Any]]:
