@@ -102,13 +102,7 @@ export class KnowledgePipelineStack extends cdk.Stack {
       // connection abruptly closed with no response and the S3 cache never
       // refreshed.
       timeout: cdk.Duration.minutes(15),
-      // 2048MB: the cache rebuild streams serialized output to /tmp via
-      // msgpack.pack (not packb), so the ~877 MB body never resides in heap.
-      // Peak memory is ~1.3 GB (matrix + meta + vectors_bytes during
-      // serialization). 2048 MB provides comfortable headroom.
-      memorySize: 2048,
-      // 1536 MB /tmp: the cache rebuild writes the ~877 MB msgpack file to
-      // /tmp before streaming it to S3 via upload_file.
+      memorySize: 3072,
       ephemeralStorageSize: cdk.Size.mebibytes(1536),
       role: embedderRole,
       environment: commonEnv,
