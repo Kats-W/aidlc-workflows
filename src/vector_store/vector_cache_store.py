@@ -123,10 +123,7 @@ class VectorCacheS3Store:
                 else:
                     meta.append({"chunkId": chunk_id, "sourceUrl": source_url})
                     row = embedding.reshape(1, -1)
-                    if matrix.size == 0:
-                        matrix = row
-                    else:
-                        matrix = np.vstack([matrix, row])
+                    matrix = row if matrix.size == 0 else np.vstack([matrix, row])
 
             try:
                 np.save(self._TMP_MATRIX, matrix)
@@ -142,7 +139,10 @@ class VectorCacheS3Store:
                         os.remove(p)
 
         await asyncio.to_thread(_patch)
-        logger.info("vector cache patched", extra={"upserts": len(upserts), "deletes": len(deletes)})
+        logger.info(
+            "vector cache patched",
+            extra={"upserts": len(upserts), "deletes": len(deletes)},
+        )
 
     async def read(self) -> tuple[np.ndarray, list[dict[str, Any]]]:
         """Download the matrix and metadata from S3.

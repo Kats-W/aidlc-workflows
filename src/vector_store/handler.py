@@ -16,7 +16,6 @@ import os
 from typing import Any
 
 import numpy as np
-
 from aws_lambda_powertools import Logger
 
 from src.common.bedrock_client import BedrockClient
