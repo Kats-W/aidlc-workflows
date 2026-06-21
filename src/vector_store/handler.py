@@ -5,10 +5,8 @@ and chunk ids to delete — embeds each upsert chunk with Titan v2, and
 reconciles the VectorStore table. The payload may be passed directly (small
 diffs) or reference S3 (large diffs); both forms are supported.
 
-The full S3 vector cache rebuild is O(corpus size) and is *not* run per batch;
-it only runs when the payload carries an explicit ``rebuildCache`` flag (the
-CrawlerLambda sets it on the final batch). This keeps per-batch invocations
-fast and within the Lambda timeout even for large crawls.
+Each batch incrementally patches the S3 vector cache with its own upserts and
+deletes — O(batch size), independent of corpus size.
 """
 
 from __future__ import annotations
@@ -17,6 +15,7 @@ import asyncio
 import os
 from typing import Any
 
+import numpy as np
 from aws_lambda_powertools import Logger
 
 from src.common.bedrock_client import BedrockClient
@@ -24,7 +23,7 @@ from src.common.errors import S3AccessError
 from src.crawler.parser import ContentChunk
 from src.crawler.s3_store import S3ContentStore
 from src.vector_store.store import VectorStore
-from src.vector_store.vector_cache_store import VectorCacheS3Store, build_matrix_and_meta
+from src.vector_store.vector_cache_store import VectorCacheS3Store
 
 logger = Logger()
 
@@ -65,27 +64,26 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     deletes = [str(c) for c in payload.get("delete", [])]
 
     upserted = 0
+    vectors: dict[str, np.ndarray] = {}
     for chunk in upserts:
         vector = await bedrock.embed(chunk.text)
         await vector_store.upsert(chunk, vector)
+        vectors[chunk.chunk_id] = np.asarray(vector, dtype=np.float32)
         upserted += 1
 
     for chunk_id in deletes:
         await vector_store.delete(chunk_id)
 
-    # Gate the full cache rebuild on an explicit flag rather than running it on
-    # every batch: the rebuild does a full DynamoDB scan + S3 upload of the whole
-    # corpus (O(corpus size)), so doing it per batch blows the Lambda timeout for
-    # large crawls. The CrawlerLambda sets ``rebuildCache`` only on the last batch.
-    if bucket and payload.get("rebuildCache"):
+    if bucket and (upserts or deletes):
         try:
-            items = await vector_store.scan_all()
-            matrix, meta = build_matrix_and_meta(items)
-            # Drop items before write to reduce peak memory.
-            del items
-            await VectorCacheS3Store(bucket=bucket).write(matrix, meta)
+            cache_upserts = [
+                (chunk.chunk_id, chunk.source_url, vectors[chunk.chunk_id])
+                for chunk in upserts
+                if chunk.chunk_id in vectors
+            ]
+            await VectorCacheS3Store(bucket=bucket).patch(cache_upserts, deletes)
         except S3AccessError as exc:
-            logger.warning("vector cache rebuild failed", extra={"error": str(exc)})
+            logger.warning("vector cache patch failed", extra={"error": str(exc)})
 
     summary = {"upserted": upserted, "deleted": len(deletes)}
     logger.info("embedder finished", extra=summary)

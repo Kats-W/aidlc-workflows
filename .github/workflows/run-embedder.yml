@@ -5,10 +5,10 @@ on:
     inputs:
       payload:
         description: >-
-          Diff payload JSON. The default forces a vector-cache rebuild without
-          changing any data (deleting a nonexistent chunk is idempotent).
+          Diff payload JSON. The default deletes a nonexistent chunk
+          (idempotent no-op) to verify the Lambda is healthy.
         required: false
-        default: '{"upsert": [], "delete": ["__cache_rebuild__"], "rebuildCache": true}'
+        default: '{"upsert": [], "delete": ["__health_check__"]}'
 
 permissions: {}
 
@@ -25,9 +25,8 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-1
       - name: Invoke EmbedderLambda
-        # The embedder Lambda timeout is 15 minutes; extend the CLI read
-        # timeout beyond that so the synchronous invoke does not give up
-        # (or get its connection closed) before the Lambda itself returns.
+        # Each batch now patches the cache incrementally (O(batch size)),
+        # so invocations complete in seconds, not minutes.
         env:
           PAYLOAD: ${{ inputs.payload }}
         run: |
@@ -41,7 +40,7 @@ jobs:
           aws lambda invoke \
             --function-name au-jibun-bank-dev-embedder \
             --cli-binary-format raw-in-base64-out \
-            --cli-read-timeout 920 \
+            --cli-read-timeout 120 \
             --payload "$PAYLOAD" \
             --log-type Tail \
             --query 'LogResult' \
