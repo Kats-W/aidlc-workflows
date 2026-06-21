@@ -102,13 +102,14 @@ export class KnowledgePipelineStack extends cdk.Stack {
       // connection abruptly closed with no response and the S3 cache never
       // refreshed.
       timeout: cdk.Duration.minutes(15),
-      // 3072MB (was 2048 -> OOM on cache write): the cache rebuild serializes
-      // the 129K-item corpus as np.save BytesIO (~500 MB) then msgpack (~877 MB).
-      // With the matrix itself (~500 MB) still in memory, peak usage during
-      // write reached ~2.4 GB — exceeding 2048 MB with Lambda runtime overhead.
-      // del statements now free intermediates eagerly, but 3072 MB provides
-      // headroom as the corpus grows.
-      memorySize: 3072,
+      // 2048MB: the cache rebuild streams serialized output to /tmp via
+      // msgpack.pack (not packb), so the ~877 MB body never resides in heap.
+      // Peak memory is ~1.3 GB (matrix + meta + vectors_bytes during
+      // serialization). 2048 MB provides comfortable headroom.
+      memorySize: 2048,
+      // 1536 MB /tmp: the cache rebuild writes the ~877 MB msgpack file to
+      // /tmp before streaming it to S3 via upload_file.
+      ephemeralStorageSize: cdk.Size.mebibytes(1536),
       role: embedderRole,
       environment: commonEnv,
       logRetention: logs.RetentionDays.THREE_MONTHS,
