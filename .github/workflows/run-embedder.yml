@@ -41,7 +41,7 @@ jobs:
           aws lambda invoke \
             --function-name au-jibun-bank-dev-embedder \
             --cli-binary-format raw-in-base64-out \
-            --cli-read-timeout 920 \
+            --cli-read-timeout 1200 \
             --payload "$PAYLOAD" \
             --log-type Tail \
             --query 'LogResult' \
