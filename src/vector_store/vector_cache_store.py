@@ -67,9 +67,12 @@ class VectorCacheS3Store:
             try:
                 vectors_buf = io.BytesIO()
                 np.save(vectors_buf, matrix)
+                vectors_bytes = vectors_buf.getvalue()
+                del vectors_buf
                 body = msgpack.packb(
-                    {"vectors": vectors_buf.getvalue(), "meta": meta}, use_bin_type=True
+                    {"vectors": vectors_bytes, "meta": meta}, use_bin_type=True
                 )
+                del vectors_bytes
                 self._client.put_object(Bucket=self._bucket, Key=CACHE_KEY, Body=body)
             except ClientError as exc:
                 raise S3AccessError(f"failed to write vector cache: {exc}") from exc
