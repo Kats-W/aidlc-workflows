@@ -59,13 +59,17 @@ def _build_dependencies() -> tuple[
 ]:
     """Construct the live pipeline collaborators (patched out in tests)."""
     history = HistoryRepository()
-    bucket = os.environ.get("CRAWL_CONTENT_BUCKET")
-    cache_store = VectorCacheS3Store(bucket=bucket) if bucket else None
+    if _searcher_singleton is not None:
+        searcher = _searcher_singleton
+    else:
+        bucket = os.environ.get("CRAWL_CONTENT_BUCKET")
+        cache_store = VectorCacheS3Store(bucket=bucket) if bucket else None
+        searcher = CosineSimilaritySearcher(VectorStore(), cache_store)
     return (
         PiiMasker(),
         Personalizer(history),
         BedrockClient(),
-        CosineSimilaritySearcher(VectorStore(), cache_store),
+        searcher,
         history,
     )
 
@@ -154,6 +158,7 @@ async def _ensure_cache_warmed() -> None:
         cache_store = VectorCacheS3Store(bucket=bucket) if bucket else None
         _searcher_singleton = CosineSimilaritySearcher(VectorStore(), cache_store)
     await _searcher_singleton.ensure_cache_loaded()
+    await _searcher_singleton._store.warm_connection()
 
 
 async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
