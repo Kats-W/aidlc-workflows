@@ -73,7 +73,7 @@ async def test_scan_all_embeddings_are_native_floats_not_decimal(  # type: ignor
     assert embedding == pytest.approx([0.123, 0.456, 0.789], abs=1e-6)
     assert not any(isinstance(v, Decimal) for v in embedding.tolist())
     assert type(items[0]["chunkId"]) is str
-    assert type(items[0]["text"]) is str
+    assert "text" not in items[0]
 
 
 async def test_scan_all_paginates_across_pages(vector_table) -> None:  # type: ignore[no-untyped-def]
