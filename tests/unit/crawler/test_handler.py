@@ -91,7 +91,7 @@ async def test_load_state_falls_back_to_fresh_cycle_on_s3_access_error() -> None
     assert visited == set()
 
 
-def test_invoke_embedder_sets_rebuild_cache_only_on_last_batch(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_invoke_embedder_batches_upserts(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("EMBEDDER_FUNCTION_NAME", "embedder-fn")
     added = [
         ContentChunk(
@@ -114,5 +114,7 @@ def test_invoke_embedder_sets_rebuild_cache_only_on_last_batch(monkeypatch) -> N
         json.loads(call.kwargs["Payload"].decode("utf-8"))
         for call in lambda_client.invoke.call_args_list
     ]
-    assert not payloads[0]["rebuildCache"]
-    assert payloads[1]["rebuildCache"] is True
+    assert len(payloads[0]["upsert"]) == _EMBEDDER_BATCH_SIZE
+    assert len(payloads[1]["upsert"]) == 1
+    assert "rebuildCache" not in payloads[0]
+    assert "rebuildCache" not in payloads[1]

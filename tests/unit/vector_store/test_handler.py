@@ -6,13 +6,14 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import boto3
+import numpy as np
 import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from src.common.errors import S3AccessError
 from src.vector_store import handler as h
-from src.vector_store.vector_cache_store import META_KEY
+from src.vector_store.vector_cache_store import MATRIX_KEY, META_KEY
 
 TABLE_NAME = "vector-store-test"
 BUCKET = "crawl-content-test"
@@ -21,6 +22,13 @@ BUCKET = "crawl-content-test"
 def _read_cache_meta(s3: object, bucket: str) -> list[dict]:
     body = s3.get_object(Bucket=bucket, Key=META_KEY)["Body"].read()  # type: ignore[attr-defined]
     return json.loads(body)
+
+
+def _read_cache_matrix(s3: object, bucket: str) -> np.ndarray:
+    import io
+
+    body = s3.get_object(Bucket=bucket, Key=MATRIX_KEY)["Body"].read()  # type: ignore[attr-defined]
+    return np.load(io.BytesIO(body))
 
 
 @pytest.fixture()
@@ -52,7 +60,7 @@ def _fake_bedrock() -> AsyncMock:
     return bedrock
 
 
-async def test_upsert_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no-untyped-def]
+async def test_upsert_patches_vector_cache(aws_env) -> None:  # type: ignore[no-untyped-def]
     s3 = aws_env
     bedrock = _fake_bedrock()
     with patch.object(h, "BedrockClient", return_value=bedrock):
@@ -67,16 +75,17 @@ async def test_upsert_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no
                     },
                 ],
                 "delete": [],
-                "rebuildCache": True,
             },
             None,
         )
     assert result == {"upserted": 1, "deleted": 0}
     meta = _read_cache_meta(s3, BUCKET)
     assert meta == [{"chunkId": "a#0", "sourceUrl": "https://x/faq"}]
+    matrix = _read_cache_matrix(s3, BUCKET)
+    assert matrix.shape == (1, 2)
 
 
-async def test_delete_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no-untyped-def]
+async def test_delete_patches_vector_cache(aws_env) -> None:  # type: ignore[no-untyped-def]
     s3 = aws_env
     bedrock = _fake_bedrock()
     with patch.object(h, "BedrockClient", return_value=bedrock):
@@ -91,19 +100,18 @@ async def test_delete_rebuilds_vector_cache(aws_env) -> None:  # type: ignore[no
                     },
                 ],
                 "delete": [],
-                "rebuildCache": True,
             },
             None,
         )
         result = await h.handler(
-            {"upsert": [], "delete": ["a#0"], "rebuildCache": True}, None
+            {"upsert": [], "delete": ["a#0"]}, None
         )
     assert result == {"upserted": 0, "deleted": 1}
     meta = _read_cache_meta(s3, BUCKET)
     assert meta == []
 
 
-async def test_no_changes_skips_cache_rebuild(aws_env) -> None:  # type: ignore[no-untyped-def]
+async def test_no_changes_skips_cache_patch(aws_env) -> None:  # type: ignore[no-untyped-def]
     s3 = aws_env
     bedrock = _fake_bedrock()
     with patch.object(h, "BedrockClient", return_value=bedrock):
@@ -113,34 +121,11 @@ async def test_no_changes_skips_cache_rebuild(aws_env) -> None:  # type: ignore[
         s3.get_object(Bucket=BUCKET, Key=META_KEY)
 
 
-async def test_upsert_without_rebuild_flag_skips_cache_rebuild(aws_env) -> None:  # type: ignore[no-untyped-def]
-    s3 = aws_env
-    bedrock = _fake_bedrock()
-    with patch.object(h, "BedrockClient", return_value=bedrock):
-        result = await h.handler(
-            {
-                "upsert": [
-                    {
-                        "chunkId": "a#0",
-                        "sourceUrl": "https://x/faq",
-                        "text": "alpha",
-                        "contentHash": "h1",
-                    },
-                ],
-                "delete": [],
-            },
-            None,
-        )
-    assert result == {"upserted": 1, "deleted": 0}
-    with pytest.raises(ClientError):
-        s3.get_object(Bucket=BUCKET, Key=META_KEY)
-
-
-async def test_cache_rebuild_failure_is_logged_not_raised(aws_env) -> None:  # type: ignore[no-untyped-def]
+async def test_cache_patch_failure_is_logged_not_raised(aws_env) -> None:  # type: ignore[no-untyped-def]
     bedrock = _fake_bedrock()
     with (
         patch.object(h, "BedrockClient", return_value=bedrock),
-        patch.object(h.VectorCacheS3Store, "write", AsyncMock(side_effect=S3AccessError("boom"))),
+        patch.object(h.VectorCacheS3Store, "patch", AsyncMock(side_effect=S3AccessError("boom"))),
     ):
         result = await h.handler(
             {
@@ -153,8 +138,45 @@ async def test_cache_rebuild_failure_is_logged_not_raised(aws_env) -> None:  # t
                     },
                 ],
                 "delete": [],
-                "rebuildCache": True,
             },
             None,
         )
     assert result == {"upserted": 1, "deleted": 0}
+
+
+async def test_upsert_replaces_existing_in_cache(aws_env) -> None:  # type: ignore[no-untyped-def]
+    """Upserting a chunk that already exists in the cache replaces it."""
+    s3 = aws_env
+    bedrock = _fake_bedrock()
+    with patch.object(h, "BedrockClient", return_value=bedrock):
+        await h.handler(
+            {
+                "upsert": [
+                    {
+                        "chunkId": "a#0",
+                        "sourceUrl": "https://x/faq",
+                        "text": "alpha",
+                        "contentHash": "h1",
+                    },
+                ],
+                "delete": [],
+            },
+            None,
+        )
+        await h.handler(
+            {
+                "upsert": [
+                    {
+                        "chunkId": "a#0",
+                        "sourceUrl": "https://x/faq-v2",
+                        "text": "alpha updated",
+                        "contentHash": "h2",
+                    },
+                ],
+                "delete": [],
+            },
+            None,
+        )
+    meta = _read_cache_meta(s3, BUCKET)
+    assert len(meta) == 1
+    assert meta[0] == {"chunkId": "a#0", "sourceUrl": "https://x/faq-v2"}

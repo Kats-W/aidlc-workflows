@@ -78,6 +78,72 @@ class VectorCacheS3Store:
         await asyncio.to_thread(_write)
         logger.info("vector cache written to s3", extra={"rows": len(meta)})
 
+    async def patch(
+        self,
+        upserts: list[tuple[str, str, np.ndarray]],
+        deletes: list[str],
+    ) -> None:
+        """Apply incremental updates to the S3 cache without a full scan.
+
+        ``upserts`` is a list of ``(chunkId, sourceUrl, embedding)`` tuples.
+        ``deletes`` is a list of ``chunkId`` strings to remove.
+
+        The method downloads the existing cache, applies the delta, and
+        re-uploads.  If no cache exists yet, it starts from an empty state.
+        """
+
+        def _patch() -> None:
+            try:
+                obj = self._client.get_object(Bucket=self._bucket, Key=MATRIX_KEY)
+                matrix = np.load(io.BytesIO(obj["Body"].read()))
+                obj = self._client.get_object(Bucket=self._bucket, Key=META_KEY)
+                meta: list[dict[str, Any]] = json.loads(obj["Body"].read())
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code in ("NoSuchKey", "404"):
+                    matrix = np.empty((0, 0), dtype=np.float32)
+                    meta = []
+                else:
+                    raise S3AccessError(f"failed to read vector cache for patch: {exc}") from exc
+
+            id_to_idx: dict[str, int] = {m["chunkId"]: i for i, m in enumerate(meta)}
+
+            delete_set = set(deletes)
+            keep = [i for i, m in enumerate(meta) if m["chunkId"] not in delete_set]
+            if len(keep) < len(meta):
+                meta = [meta[i] for i in keep]
+                matrix = matrix[keep] if matrix.size > 0 else matrix
+
+            for chunk_id, source_url, embedding in upserts:
+                existing = id_to_idx.get(chunk_id)
+                if existing is not None and existing < len(meta):
+                    idx = next(i for i, m in enumerate(meta) if m["chunkId"] == chunk_id)
+                    meta[idx] = {"chunkId": chunk_id, "sourceUrl": source_url}
+                    matrix[idx] = embedding
+                else:
+                    meta.append({"chunkId": chunk_id, "sourceUrl": source_url})
+                    row = embedding.reshape(1, -1)
+                    if matrix.size == 0:
+                        matrix = row
+                    else:
+                        matrix = np.vstack([matrix, row])
+
+            try:
+                np.save(self._TMP_MATRIX, matrix)
+                with open(self._TMP_META, "w", encoding="utf-8") as f:
+                    json.dump(meta, f, ensure_ascii=False)
+                self._client.upload_file(self._TMP_MATRIX, self._bucket, MATRIX_KEY)
+                self._client.upload_file(self._TMP_META, self._bucket, META_KEY)
+            except ClientError as exc:
+                raise S3AccessError(f"failed to write vector cache: {exc}") from exc
+            finally:
+                for p in (self._TMP_MATRIX, self._TMP_META):
+                    if os.path.exists(p):
+                        os.remove(p)
+
+        await asyncio.to_thread(_patch)
+        logger.info("vector cache patched", extra={"upserts": len(upserts), "deletes": len(deletes)})
+
     async def read(self) -> tuple[np.ndarray, list[dict[str, Any]]]:
         """Download the matrix and metadata from S3.
 
