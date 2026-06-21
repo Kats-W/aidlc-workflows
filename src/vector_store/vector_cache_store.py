@@ -1,17 +1,16 @@
 """S3-backed combined vector cache for the cosine similarity searcher.
 
-:class:`VectorCacheS3Store` persists the *entire* VectorStore corpus (embedding
-matrix + chunk metadata) as a single S3 object. The EmbedderLambda (U-02)
-rebuilds this cache once per crawl cycle (on the final diff batch);
-:class:`CosineSimilaritySearcher`
-(U-03) reads it on a cold ``/tmp`` cache instead of running a full DynamoDB
-``Scan`` on the request path.
+:class:`VectorCacheS3Store` persists the embedding matrix and lightweight
+metadata (chunkId + sourceUrl, **no text**) as a single S3 object.
+Text is fetched from DynamoDB at query time for the top-k hits only,
+keeping the cache small enough to build within the Lambda memory limit.
 """
 
 from __future__ import annotations
 
 import asyncio
 import io
+import os
 from typing import Any
 
 import boto3
@@ -35,7 +34,7 @@ CACHE_KEY: str = "vector-cache/cache.msgpack"
 def build_matrix_and_meta(items: list[dict[str, Any]]) -> tuple[np.ndarray, list[dict[str, Any]]]:
     """Convert :meth:`VectorStore.scan_all` items into a matrix + metadata list."""
     meta = [
-        {"chunkId": it["chunkId"], "sourceUrl": it.get("sourceUrl", ""), "text": it.get("text", "")}
+        {"chunkId": it["chunkId"], "sourceUrl": it.get("sourceUrl", "")}
         for it in items
     ]
     if items:
@@ -60,6 +59,8 @@ class VectorCacheS3Store:
         self._bucket = bucket
         self._client = client or boto3.client("s3")
 
+    _TMP_CACHE = "/tmp/cache_build.msgpack"
+
     async def write(self, matrix: np.ndarray, meta: list[dict[str, Any]]) -> None:
         """Upload the combined corpus matrix + metadata to S3 as one object."""
 
@@ -69,13 +70,21 @@ class VectorCacheS3Store:
                 np.save(vectors_buf, matrix)
                 vectors_bytes = vectors_buf.getvalue()
                 del vectors_buf
-                body = msgpack.packb(
-                    {"vectors": vectors_bytes, "meta": meta}, use_bin_type=True
-                )
+
+                with open(self._TMP_CACHE, "wb") as f:
+                    msgpack.pack(
+                        {"vectors": vectors_bytes, "meta": meta},
+                        f,
+                        use_bin_type=True,
+                    )
                 del vectors_bytes
-                self._client.put_object(Bucket=self._bucket, Key=CACHE_KEY, Body=body)
+
+                self._client.upload_file(self._TMP_CACHE, self._bucket, CACHE_KEY)
             except ClientError as exc:
                 raise S3AccessError(f"failed to write vector cache: {exc}") from exc
+            finally:
+                if os.path.exists(self._TMP_CACHE):
+                    os.remove(self._TMP_CACHE)
 
         await asyncio.to_thread(_write)
         logger.info("vector cache written to s3", extra={"rows": len(meta)})

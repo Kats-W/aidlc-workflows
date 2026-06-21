@@ -32,8 +32,8 @@ def test_build_matrix_and_meta() -> None:
     matrix, meta = build_matrix_and_meta(items)
     assert matrix.shape == (2, 2)
     assert meta == [
-        {"chunkId": "a", "sourceUrl": "u-a", "text": "alpha"},
-        {"chunkId": "b", "sourceUrl": "u-b", "text": "beta"},
+        {"chunkId": "a", "sourceUrl": "u-a"},
+        {"chunkId": "b", "sourceUrl": "u-b"},
     ]
 
 
@@ -46,8 +46,8 @@ def test_build_matrix_and_meta_empty() -> None:
 async def test_write_and_read_roundtrip(cache_store: VectorCacheS3Store) -> None:
     matrix = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     meta = [
-        {"chunkId": "a", "sourceUrl": "u-a", "text": "alpha"},
-        {"chunkId": "b", "sourceUrl": "u-b", "text": "beta"},
+        {"chunkId": "a", "sourceUrl": "u-a"},
+        {"chunkId": "b", "sourceUrl": "u-b"},
     ]
     await cache_store.write(matrix, meta)
     loaded_matrix, loaded_meta = await cache_store.read()

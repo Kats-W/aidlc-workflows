@@ -77,11 +77,15 @@ class CosineSimilaritySearcher:
 
         top_indices = self._cosine_top_k(matrix, query, top_k)
         scores = self._cosine_scores(matrix, query)
+
+        chunk_ids = [meta[i]["chunkId"] for i in top_indices]
+        texts = await self._store.batch_get_texts(chunk_ids)
+
         hits = [
             SearchHit(
                 chunk_id=meta[i]["chunkId"],
                 source_url=meta[i].get("sourceUrl", ""),
-                text=meta[i].get("text", ""),
+                text=texts.get(meta[i]["chunkId"], ""),
                 score=float(scores[i]),
             )
             for i in top_indices
