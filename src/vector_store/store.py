@@ -108,6 +108,18 @@ class VectorStore:
         await asyncio.to_thread(_delete)
         logger.debug("deleted vector", extra={"chunk_id": chunk_id})
 
+    async def warm_connection(self) -> None:
+        """Establish the DynamoDB connection so subsequent calls skip cold-connect latency."""
+
+        def _warm() -> None:
+            self._client.get_item(
+                TableName=self._table_name,
+                Key={"chunkId": {"S": "__warmup__"}},
+                ProjectionExpression="chunkId",
+            )
+
+        await asyncio.to_thread(_warm)
+
     async def batch_get_texts(self, chunk_ids: list[str]) -> dict[str, str]:
         """Fetch ``text`` for a small set of chunk IDs via ``BatchGetItem``."""
 
