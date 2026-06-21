@@ -114,7 +114,7 @@ export class ConversationStack extends cdk.Stack {
       new iam.PolicyStatement({
         sid: 'VectorStoreRead',
         effect: iam.Effect.ALLOW,
-        actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+        actions: ['dynamodb:GetItem', 'dynamodb:BatchGetItem', 'dynamodb:Query', 'dynamodb:Scan'],
         resources: [vectorStoreArn, `${vectorStoreArn}/index/*`],
       }),
     );
