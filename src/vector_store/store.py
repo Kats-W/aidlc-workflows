@@ -138,7 +138,7 @@ class VectorStore:
     _PARALLEL_SCAN_SEGMENTS: int = 8
 
     async def scan_all(self) -> list[dict[str, Any]]:
-        """Scan every item, returning embedding/text/sourceUrl/chunkId.
+        """Scan every item, returning embedding/sourceUrl/chunkId.
 
         Uses the low-level DynamoDB client with a :class:`_FloatDeserializer`
         so embedding Numbers deserialize directly to ``float`` instead of
@@ -156,8 +156,7 @@ class VectorStore:
             try:
                 kwargs: dict[str, Any] = {
                     "TableName": self._table_name,
-                    "ProjectionExpression": "chunkId, sourceUrl, #t, embedding",
-                    "ExpressionAttributeNames": {"#t": "text"},
+                    "ProjectionExpression": "chunkId, sourceUrl, embedding",
                     "Segment": segment,
                     "TotalSegments": self._PARALLEL_SCAN_SEGMENTS,
                 }
@@ -168,7 +167,6 @@ class VectorStore:
                             {
                                 "chunkId": _deser(item["chunkId"]),
                                 "sourceUrl": _deser(item.get("sourceUrl")) or "",
-                                "text": _deser(item.get("text")) or "",
                                 "embedding": np.asarray(
                                     _deser(item.get("embedding")) or [], dtype=np.float32
                                 ),
