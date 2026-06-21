@@ -62,14 +62,7 @@ class VectorCacheS3Store:
     _TMP_CACHE = "/tmp/cache_build.msgpack"
 
     async def write(self, matrix: np.ndarray, meta: list[dict[str, Any]]) -> None:
-        """Upload the combined corpus matrix + metadata to S3 as one object.
-
-        Serializes via ``msgpack.pack`` (streaming to /tmp) instead of
-        ``msgpack.packb`` (in-memory) so the ~877 MB output never resides
-        in the Lambda heap. The temp file is uploaded with ``upload_file``
-        which streams from disk, keeping peak memory at ~1.3 GB instead
-        of ~2.4 GB.
-        """
+        """Upload the combined corpus matrix + metadata to S3 as one object."""
 
         def _write() -> None:
             try:
