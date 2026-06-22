@@ -2,6 +2,40 @@
 
 ---
 
+## Operations Phase — RagHandler 検索レイテンシ最適化（PR #73-75）
+
+**Timestamp**: 2026-06-22T08:00:00Z
+**User Input**: PR #72 デプロイ後の test-rag-handler で DYNAMO_ACCESS_ERROR、修正後に TIMEOUT_BUDGET_EXCEEDED。横展開調査と根本対策を要求。
+**AI Response**: インクリメンタルキャッシュ移行に伴う RagHandler の検索レイテンシ悪化（669ms → 2,370ms）を3段階で修正。
+
+**PR #73 — dynamodb:BatchGetItem IAM 権限追加**:
+PR #72 で導入した batch_get_texts（top-k の text を DynamoDB BatchGetItem で取得）に対応する IAM 権限が ragRole に欠けていた。CloudWatch で DYNAMO_ACCESS_ERROR を確認。横展開調査で ragRole のみが BatchGetItem を必要とすることを確認し、conversation_stack.ts の VectorStoreRead ポリシーに追加。
+
+**PR #74 — DynamoDB コールド接続ウォームアップ + シングルトン再利用**:
+IAM 修正後、search が 669ms → 2,370ms に悪化。batch_get_texts の初回 DynamoDB TCP 接続確立（~1,700ms）が 6s バジェット内で発生していたことが原因。VectorStore.warm_connection()（ダミー get_item）を追加し、_ensure_cache_warmed() 内（バジェット外）で呼び出し。さらに _build_dependencies() が毎回新しい VectorStore を生成していたため、warm 済みシングルトンが使われていない問題も同時修正。
+
+**PR #75 — メモリキャッシュ + float32 統一**:
+PR #74 後もコールドスタートで search 2,204ms（/tmp から 500MB .npy 読み込みが ~1,500ms）。2点の最適化を実施:
+1. インメモリキャッシュ: ensure_cache_loaded() の S3 DL 時に行列+メタデータをインスタンス変数にも保持（TTL 付き）。search 時の /tmp ディスク I/O をスキップ
+2. float64 → float32 統一: 埋め込みは全て float32 で保存済みだが、searcher がクエリを float64 にキャストし numpy が行列全体を暗黙アップキャスト（500MB → 1GB 一時メモリ）。精度影響なし（元データ float32、業界標準も float32 以下）
+
+**計測結果（CloudWatch pipeline step timing）**:
+
+| 実行 | search | generate | 合計 | 結果 |
+|------|--------|----------|------|------|
+| PR #72 直後（IAM不足） | — | — | — | DYNAMO_ACCESS_ERROR |
+| PR #73 後（コールド） | 2,370ms | 3,307ms | ~5,879ms | TIMEOUT_BUDGET_EXCEEDED |
+| PR #73 後（ウォーム） | 1,778ms | 3,186ms | ~5,204ms | hit:true |
+| PR #74 後（コールド） | 2,234ms | 3,004ms | ~5,490ms | hit:true |
+| PR #75 後 | 検証待ち | — | — | 期待: search ≤ 500ms |
+
+**留意点**: コーパス 2-3 倍時にメモリキャッシュ ~1-1.5GB 追加。Lambda 4,096MB で 2 倍まで対応可、3 倍超でメモリ増設（最大 10,240MB）が必要。
+
+**残作業**: PR #75 デプロイ後に test-rag-handler で search ≤ 500ms、hit:true を確認
+**Context**: OPERATIONS — RagHandler 検索レイテンシ最適化。
+
+---
+
 ## Operations Phase — EmbedderLambda OOM 解消 + インクリメンタルキャッシュ
 
 **Timestamp**: 2026-06-21T21:00:00Z
