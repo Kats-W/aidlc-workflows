@@ -363,4 +363,39 @@
         - CrawlerLambda から rebuildCache 関連コード削除
         - run-embedder.yml: cli-read-timeout を 920s → 120s に短縮
         - テスト更新: patch の create/append/replace/delete/combined テスト追加
+- [x] PR #73: RagHandler IAM に dynamodb:BatchGetItem 追加
+      - 問題: PR #72 のインクリメンタルキャッシュ移行で batch_get_texts
+        （top-k の text を DynamoDB BatchGetItem で取得）を導入したが、
+        ragRole の VectorStoreRead ポリシーに BatchGetItem が欠けていた
+      - CloudWatch で DYNAMO_ACCESS_ERROR を確認、横展開調査で
+        ragRole のみが BatchGetItem を必要とすることを確認
+      - conversation_stack.ts: VectorStoreRead に dynamodb:BatchGetItem 追加
+- [x] PR #74: DynamoDB コールド接続ウォームアップ + シングルトン再利用
+      - 問題: PR #73 修正後、search が 669ms → 2,370ms に悪化。
+        batch_get_texts が初回呼び出しで DynamoDB TCP 接続確立（~1,700ms）
+        を行い、6s パイプラインバジェットを超過（TIMEOUT_BUDGET_EXCEEDED）
+      - 対策1: VectorStore.warm_connection() 追加 — ダミー get_item で
+        TCP 接続を事前確立。既存の dynamodb:GetItem IAM 権限で動作
+      - 対策2: _build_dependencies() が _searcher_singleton を再利用
+        するよう変更（毎回新しい VectorStore を生成していたため、
+        シングルトンの warm 済み接続が使われていなかった）
+      - _ensure_cache_warmed() で warm_connection() を呼び出し
+        （6s バジェット外で実行）
+- [x] PR #75: メモリキャッシュ + float32 統一
+      - 問題: PR #74 修正後もコールドスタートで search 2,204ms。
+        warm_connection は DynamoDB 接続のみ対象で、/tmp からの
+        500MB .npy ファイル読み込み（~1,500ms）が主因と判明
+      - 対策1: インメモリキャッシュ — 行列+メタデータをインスタンス変数に
+        保持（TTL 付き）。ensure_cache_loaded() の S3 DL 時にメモリにも
+        セットし、パイプラインの search で /tmp ディスク I/O をスキップ
+      - 対策2: float64 → float32 統一 — 埋め込みは全て float32 で保存済み
+        だが、searcher.py がクエリベクトルを float64 にキャストしていたため
+        numpy が行列全体を float64 に暗黙アップキャスト（500MB → 1GB）。
+        精度向上なし（元データが float32 の時点で有効精度7桁）。
+        業界標準（FAISS/Pinecone等）も float32 以下
+      - 期待効果: search ~2,200ms → ~400ms（コールド）/ ~300ms（ウォーム）
+      - 留意: コーパス 2-3倍時にメモリ ~1-1.5GB 追加。Lambda 4,096MB で
+        対応可だが、3倍超でメモリ増設（最大10,240MB）が必要
+- [ ] PR #75 デプロイ後の検証: test-rag-handler で search ≤ 500ms、
+      hit:true、6s バジェット内を確認
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
