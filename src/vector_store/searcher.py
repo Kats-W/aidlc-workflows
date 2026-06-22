@@ -55,6 +55,9 @@ class CosineSimilaritySearcher:
     def __init__(self, store: VectorStore, cache_store: VectorCacheS3Store | None = None) -> None:
         self._store = store
         self._cache_store = cache_store
+        self._mem_matrix: np.ndarray | None = None
+        self._mem_meta: list[dict[str, Any]] | None = None
+        self._mem_ts: float = 0.0
 
     async def search(self, query_vec: list[float], top_k: int = 5) -> list[SearchHit]:
         """Return the ``top_k`` most cosine-similar chunks to ``query_vec``.
@@ -69,7 +72,7 @@ class CosineSimilaritySearcher:
         if matrix.size == 0:
             return []
 
-        query = np.asarray(query_vec, dtype=np.float64)
+        query = np.asarray(query_vec, dtype=np.float32)
         if query.shape[0] != matrix.shape[1]:
             raise SearchError(
                 f"query dim {query.shape[0]} != corpus dim {matrix.shape[1]}"
@@ -94,29 +97,36 @@ class CosineSimilaritySearcher:
         return hits
 
     async def _load_vectors(self) -> tuple[np.ndarray, list[dict[str, Any]]]:
-        """Load the corpus from /tmp cache when valid, else S3, else DynamoDB."""
+        """Load the corpus from memory, /tmp, S3, or DynamoDB (in priority order)."""
+        if self._mem_matrix is not None and self._mem_meta is not None:
+            if (time.time() - self._mem_ts) < self.CACHE_TTL_SECONDS:
+                return self._mem_matrix, self._mem_meta
+            self._mem_matrix = None
+            self._mem_meta = None
+
         if self._is_cache_valid():
             try:
                 matrix = np.load(CACHE_VECTORS)
                 with open(CACHE_META, encoding="utf-8") as fh:
                     meta = json.load(fh)
                 logger.debug("vector cache hit", extra={"rows": len(meta)})
+                self._mem_matrix = matrix
+                self._mem_meta = meta
+                self._mem_ts = time.time()
                 return matrix, meta
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 logger.warning("vector cache load failed, refreshing", extra={"error": str(exc)})
 
         if self._cache_store is not None:
-            # When the handler calls ensure_cache_loaded() before the timed
-            # pipeline, this branch is only reached if the /tmp cache is stale
-            # or ensure_cache_loaded() wasn't called. Fall through to DynamoDB
-            # scan would be too slow, so return empty and let the fallback
-            # answer handle it.
             logger.info("s3 vector cache not in /tmp, returning empty corpus")
-            return np.empty((0, 0), dtype=np.float64), []
+            return np.empty((0, 0), dtype=np.float32), []
 
         items = await self._store.scan_all()
         matrix, meta = build_matrix_and_meta(items)
         self._write_cache(matrix, meta)
+        self._mem_matrix = matrix
+        self._mem_meta = meta
+        self._mem_ts = time.time()
         return matrix, meta
 
     async def ensure_cache_loaded(self) -> None:
@@ -132,6 +142,9 @@ class CosineSimilaritySearcher:
             matrix, meta = await self._cache_store.read()
             if matrix.shape[0] == len(meta):
                 self._write_cache(matrix, meta)
+                self._mem_matrix = matrix
+                self._mem_meta = meta
+                self._mem_ts = time.time()
                 logger.info("cache pre-warmed to /tmp", extra={"rows": len(meta)})
             else:
                 logger.warning("cache pre-warm row mismatch")

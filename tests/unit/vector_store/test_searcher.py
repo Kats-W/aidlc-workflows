@@ -103,9 +103,11 @@ async def test_cache_ttl_expiry_refreshes() -> None:
     store = _store_with(CORPUS)
     s = CosineSimilaritySearcher(store)  # type: ignore[arg-type]
     await s.search([1.0, 0.0, 0.0], top_k=1)
-    # Backdate the timestamp beyond the TTL.
+    # Backdate both /tmp and in-memory timestamps beyond the TTL.
+    expired = time.time() - CosineSimilaritySearcher.CACHE_TTL_SECONDS - 1
     with open(CACHE_TS, "w", encoding="utf-8") as fh:
-        fh.write(str(time.time() - CosineSimilaritySearcher.CACHE_TTL_SECONDS - 1))
+        fh.write(str(expired))
+    s._mem_ts = expired
     store.scan_all.reset_mock()  # type: ignore[attr-defined]
     await s.search([1.0, 0.0, 0.0], top_k=1)
     store.scan_all.assert_called_once()  # type: ignore[attr-defined]
