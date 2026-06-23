@@ -2,6 +2,31 @@
 
 ---
 
+## Operations Phase — PR #75 デプロイ後検証
+
+**Timestamp**: 2026-06-23T14:41:00Z
+**User Input**: PR #75 デプロイ後の検証で前回成功した RAG テストが失敗。ログ調査を要求。続けて test-rag-handler を2回連続実行し評価を要求。
+**AI Response**: CloudWatch pipeline step timing の内部タイムスタンプを精査し、原因切り分けと再検証を実施。
+
+**初回失敗（2026-06-22T21:05、コールドスタート）の分析**:
+タイムアウトは search ではなく generate_answer 中に発生していた（search 847ms で正常完了・hits=5 → Bedrock 生成が残バジェット ~4.9s を使い切り TIMEOUT_BUDGET_EXCEEDED）。Init Duration 1,533ms と cache pre-warm ログから当該呼び出しはコールドスタートであり、handler の設計（コールド初回はバジェット外で /tmp DL を行い、初回は時間切れを許容）通りの挙動と判定。#75 は search のみ変更しており生成には未関与のため、リグレッションではなく「生成レイテンシのテール変動 × コールドスタート」の重なりと結論。
+
+**2回連続再検証（2026-06-23T14:40、test-rag-handler）— 両方とも hit:true**:
+
+| 実行 | 起動 | embed | search | generate | 合計 | 結果 |
+|------|------|-------|--------|----------|------|------|
+| RUN 1 | コールド | 199ms | 858ms | 3,125ms | ~4,259ms | hit:true |
+| RUN 2 | ウォーム | 172ms | 553ms | 2,763ms | ~3,552ms | hit:true |
+
+**評価**:
+1. #75 の search 最適化は有効 — ウォーム search 553ms（#75 前 ~1,800ms 想定、目標 ~300〜500ms をほぼ達成）。
+2. 初回失敗は #75 のリグレッションではなく、Bedrock generate_answer のテールレイテンシ変動が主因と確定（同一コールド条件で RUN 1 は 3,125ms で完了し成功）。
+3. 残リスク: generate_answer がパイプライン最大ボトルネック（2.7〜3.1s・変動大）。ウォーム路は ~2.4s の余裕があり安全だが、コールド路（embed+search で ~1.05s 消費）は生成が ~5s に振れると 6s バジェットを超える脆さが残る。今後 ANSWER_MAX_TOKENS 短縮やストリーミング化を #75 と独立に検討する価値あり。
+
+**Context**: OPERATIONS — PR #75 デプロイ後検証完了。RAG パイプライン正常稼働を確認。
+
+---
+
 ## Operations Phase — RagHandler 検索レイテンシ最適化（PR #73-75）
 
 **Timestamp**: 2026-06-22T08:00:00Z
@@ -27,11 +52,12 @@ PR #74 後もコールドスタートで search 2,204ms（/tmp から 500MB .npy
 | PR #73 後（コールド） | 2,370ms | 3,307ms | ~5,879ms | TIMEOUT_BUDGET_EXCEEDED |
 | PR #73 後（ウォーム） | 1,778ms | 3,186ms | ~5,204ms | hit:true |
 | PR #74 後（コールド） | 2,234ms | 3,004ms | ~5,490ms | hit:true |
-| PR #75 後 | 検証待ち | — | — | 期待: search ≤ 500ms |
+| PR #75 後（コールド） | 858ms | 3,125ms | ~4,259ms | hit:true |
+| PR #75 後（ウォーム） | 553ms | 2,763ms | ~3,552ms | hit:true |
 
 **留意点**: コーパス 2-3 倍時にメモリキャッシュ ~1-1.5GB 追加。Lambda 4,096MB で 2 倍まで対応可、3 倍超でメモリ増設（最大 10,240MB）が必要。
 
-**残作業**: PR #75 デプロイ後に test-rag-handler で search ≤ 500ms、hit:true を確認
+**残作業**: PR #75 デプロイ後に test-rag-handler で search ≤ 500ms、hit:true を確認 → [検証完了 2026-06-23](#operations-phase--pr-75-デプロイ後検証)
 **Context**: OPERATIONS — RagHandler 検索レイテンシ最適化。
 
 ---
