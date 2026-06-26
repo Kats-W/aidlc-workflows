@@ -396,6 +396,16 @@
       - 期待効果: search ~2,200ms → ~400ms（コールド）/ ~300ms（ウォーム）
       - 留意: コーパス 2-3倍時にメモリ ~1-1.5GB 追加。Lambda 4,096MB で
         対応可だが、3倍超でメモリ増設（最大10,240MB）が必要
-- [ ] PR #75 デプロイ後の検証: test-rag-handler で search ≤ 500ms、
+- [x] PR #75 デプロイ後の検証: test-rag-handler で search ≤ 500ms、
       hit:true、6s バジェット内を確認
+      - 検証日 2026-06-23、2回連続実行とも hit:true
+        - RUN 1（コールド）: search 858ms / generate 3,125ms / 合計 ~4,259ms
+        - RUN 2（ウォーム）: search 553ms / generate 2,763ms / 合計 ~3,552ms
+      - ウォーム search 553ms で #75 最適化の効果を確認（#75 前 ~1,800ms）
+      - 6/22 の初回失敗は #75 のリグレッションではなく、Bedrock
+        generate_answer のテールレイテンシ変動 × コールドスタートの
+        重なりと判定（search ではなく生成中にタイムアウトしていた）
+      - 残リスク: generate_answer が最大ボトルネック（2.7〜3.1s・変動大）。
+        コールド路は生成が ~5s に振れると 6s 超過の脆さ。今後
+        ANSWER_MAX_TOKENS 短縮 / ストリーミング化を独立検討
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
