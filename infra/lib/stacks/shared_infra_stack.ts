@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -517,38 +518,50 @@ export class SharedInfraStack extends cdk.Stack {
     // ("The locale 'ja_JP' doesn't have any utterances"). RagQuery satisfies that
     // requirement; routing still relies on $.Lex.InputTranscript, so the matched
     // intent is irrelevant to the RAG pipeline.
+    const lexBotLocales: lex.CfnBot.BotLocaleProperty[] = [
+      {
+        localeId: 'ja_JP',
+        nluConfidenceThreshold: 0.4,
+        voiceSettings: { voiceId: 'Kazuha', engine: 'neural' },
+        intents: [
+          {
+            // Custom intent required for the ja_JP locale to build. Name must be
+            // alphanumeric (^([0-9a-zA-Z][_-]?)+$); utterances may be Japanese.
+            name: 'RagQuery',
+            sampleUtterances: [
+              { utterance: '質問があります' },
+              { utterance: '教えてください' },
+              { utterance: '住宅ローンについて' },
+            ],
+          },
+          {
+            name: 'FallbackIntent',
+            parentIntentSignature: 'AMAZON.FallbackIntent',
+          },
+        ],
+      },
+    ];
+
     const lexBot = new lex.CfnBot(this, 'LexBot', {
       name: `${prefix}-bot`,
       roleArn: lexServiceRole.roleArn,
       dataPrivacy: { ChildDirected: false },
       idleSessionTtlInSeconds: 300,
       autoBuildBotLocales: true,
-      botLocales: [
-        {
-          localeId: 'ja_JP',
-          nluConfidenceThreshold: 0.4,
-          voiceSettings: { voiceId: 'Kazuha', engine: 'neural' },
-          intents: [
-            {
-              // Custom intent required for the ja_JP locale to build. Name must be
-              // alphanumeric (^([0-9a-zA-Z][_-]?)+$); utterances may be Japanese.
-              name: 'RagQuery',
-              sampleUtterances: [
-                { utterance: '質問があります' },
-                { utterance: '教えてください' },
-                { utterance: '住宅ローンについて' },
-              ],
-            },
-            {
-              name: 'FallbackIntent',
-              parentIntentSignature: 'AMAZON.FallbackIntent',
-            },
-          ],
-        },
-      ],
+      botLocales: lexBotLocales,
     });
 
-    const lexBotVersion = new lex.CfnBotVersion(this, 'LexBotVersion', {
+    // AWS::Lex::BotVersion is immutable: editing the bot does NOT create a new
+    // version, so a fixed logical id would leave the alias pinned to a stale
+    // version (e.g. one built before RagQuery existed -> "alias isn't built").
+    // Derive the logical id from a hash of the locale definition so any change
+    // forces a new version, and the alias (below) tracks it automatically.
+    const lexLocaleHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(lexBotLocales))
+      .digest('hex')
+      .slice(0, 8);
+    const lexBotVersion = new lex.CfnBotVersion(this, `LexBotVersion${lexLocaleHash}`, {
       botId: lexBot.attrId,
       botVersionLocaleSpecification: [
         {
