@@ -2,6 +2,39 @@
 
 ---
 
+## Operations Phase — Connect 番号整理 + Lex 音声経路修正（2026-06-27）
+
+**Timestamp**: 2026-06-27T09:45:00Z
+**User Input**: Amazon Connect の保有3番号のうち2つ（コスト高のトールフリー含む）をリリースし、残り AU 番号で音声 AI エージェントが動くよう設定見直しを要求。その後、日本番号取得の可否確認 → 個人アカウントのためテスト方向へ。最終的に残り1番号もリリースし、番号なしでのテスト可否を確認。
+**AI Response**: 永続 IAM キー化の支援後、番号リリース・割当解除・Lex 音声経路のバグ2件を修正（PR #78/#79）・dev デプロイ・実機検証まで実施。
+
+**永続認証情報の整備**:
+ユーザーの一時認証（ASIA…）期限切れを契機に、IAM ユーザー forClaude の永続キー（AKIA…・session_token 無し・chmod 600）への移行を確認。前回失敗の主因は aws_session_token 行の消し忘れだった。
+
+**電話番号の整理（取り消し不可・全リリース）**:
+- CA +1 825（DID）/ CA +1 833（トールフリー）をリリース。+1 833 は BasicQueue と escalation キューの発信者番号だったため update-queue-outbound-caller-config で解除（OutboundFlowId 維持）後にリリース。
+- AU +61 1800（トールフリー）も後日リリース。AI フロー割当を disassociate-phone-number-contact-flow で解除後にリリース。
+- 結果: 保有番号 0 件。AI コンタクトフロー本体は維持。アウトバウンド発信者番号は未設定（着信 AI には無影響）。
+
+**Lex 音声経路の修正（2件）**:
+RecognizeText が "The alias isn't built" で失敗 → 音声経路（Connect→Lex→RagHandler）が成立していないことを発見。公式ドキュメントで原因を確定し IaC で修正。
+- PR #78: ja_JP が AMAZON.FallbackIntent のみでビルド要件（カスタムインテント＋発話例 ≥1）未充足。RagQuery インテント追加で DRAFT が Built に。
+- PR #79: AWS::Lex::BotVersion がイミュータブルで新バージョンを作らず、エイリアスが失敗 v1 を指したまま。CfnBotVersion 論理 ID をボット定義ハッシュ化し新バージョン強制生成（AWS 推奨 Option 1）。
+
+**デプロイ後検証（2026-06-27）**:
+- ボット v2 生成・ja_JP `Built`、エイリアス live → v2。
+- `RecognizeText`(ja_JP) 成功（Intent=RagQuery, State=ReadyForFulfillment）。
+- RagHandler 直接 invoke で RAG コア正常（hit:true、じぶん銀行実ソース付き回答）。
+
+**日本番号取得の調査結果（公式）**:
+東京リージョンの番号取得は業務利用のみ・事業者書類3点を AWS サポートケースで提出が必須。個人アカウントは適格外のため取得は見送り、番号なしテスト導線（Connect テストチャット / Lex RecognizeText / RagHandler invoke）で代替。
+
+**運用メモ**: auto-merge は GITHUB_TOKEN でマージするため push 起因のデプロイは発火せず、dev デプロイは ci.yml を workflow_dispatch で手動起動する必要がある。
+
+**Context**: OPERATIONS — Connect 番号コスト最小化（0件）と音声 AI 経路の全層検証完了（Lex ビルド問題を恒久修正）。
+
+---
+
 ## Operations Phase — PR #75 デプロイ後検証
 
 **Timestamp**: 2026-06-23T14:41:00Z
