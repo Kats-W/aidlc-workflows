@@ -409,3 +409,27 @@
         コールド路は生成が ~5s に振れると 6s 超過の脆さ。今後
         ANSWER_MAX_TOKENS 短縮 / ストリーミング化を独立検討
 - [ ] エンドツーエンド動作確認（connect-setup-guide.md チェックリスト、電話接続問題解消後）
+- [x] 電話番号の整理・全リリース（2026-06-27、コスト最小化）:
+      - 保有3番号を全リリース（CA +1 825 DID / CA +1 833 トールフリー / AU +61 1800 トールフリー）
+        - CA 2番号は既知制約（日本から着信不可）でデッドウェイト、AU トールフリーも日本から発信不可
+        - リリースは取り消し不可。+1 833 はキュー（BasicQueue / escalation）の発信者番号だったため
+          update-queue-outbound-caller-config で解除（OutboundFlowId は維持）後にリリース
+        - AU 番号は AI フロー割当を disassociate-phone-number-contact-flow で解除後にリリース
+      - 結果: 保有番号 0 件・トールフリー維持費停止。AI フロー本体は維持
+      - アウトバウンド発信者番号は未設定（着信 AI には無影響。発信時のみ要再設定）
+- [x] Lex v2 ja_JP ロケールビルド不能の修正（PR #78）:
+      - 音声経路検証で RecognizeText が "The alias isn't built" で失敗。原因は ja_JP が
+        AMAZON.FallbackIntent のみで、Lex v2 のビルド要件（カスタムインテント＋発話例 ≥1）未充足
+      - shared_infra_stack.ts にカスタムインテント RagQuery（日本語発話例3つ）を追加。
+        ASR パススルー設計（$.Lex.InputTranscript）は維持
+- [x] Lex BotVersion イミュータブル問題の修正（PR #79）:
+      - PR #78 デプロイ後も RecognizeText 失敗継続。AWS::Lex::BotVersion はイミュータブルで
+        ボット変更時に新バージョンを作らず、エイリアス live が失敗スナップショット v1 を指したまま
+      - CfnBotVersion の論理 ID をボットロケール定義の sha256 ハッシュ化（LexBotVersion<hash>）。
+        変更時に新バージョン強制生成 → エイリアスが Fn::GetAtt で追従。AWS 推奨 Option 1 相当
+      - デプロイ後検証（2026-06-27）: ボット v2 生成・ja_JP Built、エイリアス live → v2、
+        RecognizeText 成功（Intent=RagQuery, State=ReadyForFulfillment）
+- [x] 番号なしテスト導線の確立（個人アカウントのため日本番号取得は見送り）:
+      - 日本番号は業務利用＋事業者書類3点が必須（AWS サポートケース経由）で個人アカウントは適格外
+      - テストは Connect テストチャット / Lex RecognizeText / RagHandler 直接 invoke で番号なしに実施可能
+      - RagHandler 直接 invoke で RAG コア動作を再確認（hit:true、じぶん銀行実ソース付き回答）
