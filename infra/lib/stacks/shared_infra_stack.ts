@@ -511,6 +511,12 @@ export class SharedInfraStack extends cdk.Stack {
     // Lex v2 ja-JP is available in ap-northeast-1. The bot acts as a pure ASR
     // (automatic speech recognition) device: FallbackIntent catches every utterance
     // and the full transcript is passed to the RAG Lambda via $.Lex.InputTranscript.
+    //
+    // A locale cannot be built from FallbackIntent alone: Lex v2 requires at least
+    // one *custom* intent with a valid sample utterance, otherwise the build fails
+    // ("The locale 'ja_JP' doesn't have any utterances"). RagQuery satisfies that
+    // requirement; routing still relies on $.Lex.InputTranscript, so the matched
+    // intent is irrelevant to the RAG pipeline.
     const lexBot = new lex.CfnBot(this, 'LexBot', {
       name: `${prefix}-bot`,
       roleArn: lexServiceRole.roleArn,
@@ -523,6 +529,16 @@ export class SharedInfraStack extends cdk.Stack {
           nluConfidenceThreshold: 0.4,
           voiceSettings: { voiceId: 'Kazuha', engine: 'neural' },
           intents: [
+            {
+              // Custom intent required for the ja_JP locale to build. Name must be
+              // alphanumeric (^([0-9a-zA-Z][_-]?)+$); utterances may be Japanese.
+              name: 'RagQuery',
+              sampleUtterances: [
+                { utterance: '質問があります' },
+                { utterance: '教えてください' },
+                { utterance: '住宅ローンについて' },
+              ],
+            },
             {
               name: 'FallbackIntent',
               parentIntentSignature: 'AMAZON.FallbackIntent',
