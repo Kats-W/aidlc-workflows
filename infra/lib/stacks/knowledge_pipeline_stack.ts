@@ -104,6 +104,11 @@ export class KnowledgePipelineStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(15),
       memorySize: 3072,
       ephemeralStorageSize: cdk.Size.mebibytes(1536),
+      // Serialize invocations: the cache patch is a read-modify-write of two
+      // separate S3 objects (matrix.npy + meta.json). Concurrent batches
+      // interleaving their uploads drifted the two apart (matrix/meta row
+      // mismatch), so allow only one Embedder at a time.
+      reservedConcurrentExecutions: 1,
       role: embedderRole,
       environment: commonEnv,
       logRetention: logs.RetentionDays.THREE_MONTHS,

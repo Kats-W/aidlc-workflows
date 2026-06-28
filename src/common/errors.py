@@ -156,6 +156,16 @@ class SearchError(AppError):
     code = "SEARCH_ERROR"
 
 
+class CacheConsistencyError(AppError):
+    """Raised when the vector cache matrix and metadata row counts disagree.
+
+    Guards the write path so a drifted matrix/meta pair is never persisted to
+    S3, and the patch path so updates are never applied on a corrupt base.
+    """
+
+    code = "CACHE_CONSISTENCY_ERROR"
+
+
 class ResponseParseError(AppError):
     """Raised when a model or service response cannot be parsed."""
 

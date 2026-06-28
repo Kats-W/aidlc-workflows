@@ -24,12 +24,26 @@ import numpy as np
 from aws_lambda_powertools import Logger
 from botocore.exceptions import ClientError
 
-from src.common.errors import ObjectNotFoundError, S3AccessError
+from src.common.errors import CacheConsistencyError, ObjectNotFoundError, S3AccessError
 
 logger = Logger()
 
 MATRIX_KEY: str = "vector-cache/matrix.npy"
 META_KEY: str = "vector-cache/meta.json"
+
+
+def _assert_consistent(matrix: np.ndarray, meta: list[dict[str, Any]], where: str) -> None:
+    """Guard the matrix/meta row-count invariant before persisting.
+
+    matrix and meta live in two separate S3 objects, so a drift between them
+    (observed in production: 129,861 rows vs 129,863 meta entries) makes the
+    searcher discard the whole corpus. Never write a pair that disagrees.
+    """
+    rows = int(matrix.shape[0]) if matrix.ndim == 2 else 0
+    if rows != len(meta):
+        raise CacheConsistencyError(
+            f"vector cache row mismatch in {where}: matrix={rows} meta={len(meta)}"
+        )
 
 
 def build_matrix_and_meta(items: list[dict[str, Any]]) -> tuple[np.ndarray, list[dict[str, Any]]]:
@@ -60,6 +74,8 @@ class VectorCacheS3Store:
 
         Writes to /tmp first, then uploads — no large in-memory buffers.
         """
+
+        _assert_consistent(matrix, meta, "write")
 
         def _write() -> None:
             try:
@@ -106,24 +122,40 @@ class VectorCacheS3Store:
                 else:
                     raise S3AccessError(f"failed to read vector cache for patch: {exc}") from exc
 
-            id_to_idx: dict[str, int] = {m["chunkId"]: i for i, m in enumerate(meta)}
+            # Never patch on top of an already-drifted base — it would only
+            # propagate the corruption. A full rebuild must heal it instead.
+            base_rows = int(matrix.shape[0]) if matrix.ndim == 2 else 0
+            if base_rows != len(meta):
+                raise CacheConsistencyError(
+                    f"base vector cache drifted: matrix={base_rows} meta={len(meta)}"
+                )
 
             delete_set = set(deletes)
-            keep = [i for i, m in enumerate(meta) if m["chunkId"] not in delete_set]
-            if len(keep) < len(meta):
-                meta = [meta[i] for i in keep]
-                matrix = matrix[keep] if matrix.size > 0 else matrix
+            if delete_set:
+                keep = [i for i, m in enumerate(meta) if m["chunkId"] not in delete_set]
+                if len(keep) < len(meta):
+                    meta = [meta[i] for i in keep]
+                    matrix = matrix[keep] if matrix.size > 0 else matrix
 
+            # Rebuild the index AFTER deletes so update-vs-append decisions use
+            # current positions (the old code kept stale pre-delete indices,
+            # which could append duplicates and drift matrix/meta apart).
+            id_to_idx: dict[str, int] = {m["chunkId"]: i for i, m in enumerate(meta)}
+            new_rows: list[np.ndarray] = []
             for chunk_id, source_url, embedding in upserts:
-                existing = id_to_idx.get(chunk_id)
-                if existing is not None and existing < len(meta):
-                    idx = next(i for i, m in enumerate(meta) if m["chunkId"] == chunk_id)
+                idx = id_to_idx.get(chunk_id)
+                if idx is not None:
                     meta[idx] = {"chunkId": chunk_id, "sourceUrl": source_url}
                     matrix[idx] = embedding
                 else:
+                    id_to_idx[chunk_id] = len(meta)
                     meta.append({"chunkId": chunk_id, "sourceUrl": source_url})
-                    row = embedding.reshape(1, -1)
-                    matrix = row if matrix.size == 0 else np.vstack([matrix, row])
+                    new_rows.append(np.asarray(embedding, dtype=np.float32))
+            if new_rows:
+                rows = np.asarray(new_rows, dtype=np.float32)
+                matrix = rows if matrix.size == 0 else np.vstack([matrix, rows])
+
+            _assert_consistent(matrix, meta, "patch")
 
             try:
                 np.save(self._TMP_MATRIX, matrix)
