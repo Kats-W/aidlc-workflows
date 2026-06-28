@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from moto import mock_aws
 
-from src.common.errors import ObjectNotFoundError
+from src.common.errors import CacheConsistencyError, ObjectNotFoundError
 from src.vector_store.vector_cache_store import VectorCacheS3Store, build_matrix_and_meta
 
 BUCKET = "crawl-content-test"
@@ -127,3 +127,55 @@ async def test_patch_upsert_and_delete_combined(cache_store: VectorCacheS3Store)
         {"chunkId": "b", "sourceUrl": "u-b"},
         {"chunkId": "c", "sourceUrl": "u-c"},
     ]
+
+
+async def test_patch_update_after_delete_shifts_index_no_duplicate(
+    cache_store: VectorCacheS3Store,
+) -> None:
+    """Regression: deleting an earlier chunk shifts indices; a later upsert of a
+    surviving chunk must update in place, not append a duplicate (the stale
+    pre-delete index bug that drifted matrix/meta apart)."""
+    matrix = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float32)
+    meta = [
+        {"chunkId": "a", "sourceUrl": "u-a"},
+        {"chunkId": "b", "sourceUrl": "u-b"},
+        {"chunkId": "c", "sourceUrl": "u-c"},  # index 2 before delete
+    ]
+    await cache_store.write(matrix, meta)
+
+    # Delete "a" (c shifts to index 1), then upsert "c" — must update, not append.
+    await cache_store.patch([("c", "u-c-v2", np.array([0.2, 0.2], dtype=np.float32))], ["a"])
+
+    loaded_matrix, loaded_meta = await cache_store.read()
+    assert loaded_matrix.shape == (2, 2)  # b, c — no phantom 3rd row
+    assert loaded_meta == [
+        {"chunkId": "b", "sourceUrl": "u-b"},
+        {"chunkId": "c", "sourceUrl": "u-c-v2"},
+    ]
+    assert np.allclose(loaded_matrix[1], [0.2, 0.2])
+
+
+async def test_write_rejects_row_mismatch(cache_store: VectorCacheS3Store) -> None:
+    matrix = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)  # 2 rows
+    meta = [{"chunkId": "a", "sourceUrl": "u-a"}]  # 1 entry
+    with pytest.raises(CacheConsistencyError):
+        await cache_store.write(matrix, meta)
+
+
+async def test_patch_rejects_drifted_base(cache_store: VectorCacheS3Store) -> None:
+    # Seed a deliberately drifted cache by writing the two objects directly.
+    import io
+    import json
+
+    buf = io.BytesIO()
+    np.save(buf, np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32))  # 2 rows
+    cache_store._client.put_object(
+        Bucket=BUCKET, Key="vector-cache/matrix.npy", Body=buf.getvalue()
+    )
+    cache_store._client.put_object(
+        Bucket=BUCKET,
+        Key="vector-cache/meta.json",
+        Body=json.dumps([{"chunkId": "a", "sourceUrl": "u-a"}]).encode("utf-8"),  # 1 entry
+    )
+    with pytest.raises(CacheConsistencyError):
+        await cache_store.patch([("b", "u-b", np.array([1.0, 1.0], dtype=np.float32))], [])
