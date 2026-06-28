@@ -25,7 +25,6 @@ from typing import Any
 
 from aws_lambda_powertools import Logger
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -74,15 +73,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+# CORS is handled at the edge by the Lambda Function URL's own CORS config
+# (see ChatStack). Adding FastAPI's CORSMiddleware too emits a *second*
+# Access-Control-Allow-Origin header, which browsers reject ("Failed to fetch").
 app = FastAPI(title="au Jibun Bank Chat API", lifespan=lifespan)
-
-_cors_origins = os.environ.get("CHAT_CORS_ORIGINS", "*").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in _cors_origins if o.strip()],
-    allow_methods=["POST", "GET", "OPTIONS"],
-    allow_headers=["*"],
-)
 
 
 class ChatRequest(BaseModel):
