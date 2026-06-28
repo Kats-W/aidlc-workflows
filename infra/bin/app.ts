@@ -7,6 +7,7 @@ import { OmnichannelStack } from '../lib/stacks/omnichannel_stack';
 import { ProfileStack } from '../lib/stacks/profile_stack';
 import { ImprovementStack } from '../lib/stacks/improvement_stack';
 import { DashboardStack } from '../lib/stacks/dashboard_stack';
+import { ChatStack } from '../lib/stacks/chat_stack';
 
 const app = new cdk.App();
 
@@ -73,6 +74,14 @@ new DashboardStack(app, `AuJibunBank-${env}-Dashboard`, {
   env: cdkEnv,
   envName: env,
   description: `au Jibun Bank AI Agent — Admin Dashboard (U-07) (${env})`,
+});
+
+// U-08 Web Chat API: customer-facing streaming RAG chat (FastAPI + Lambda Web
+// Adapter on a Function URL) — the web counterpart to the Connect voice path.
+new ChatStack(app, `AuJibunBank-${env}-Chat`, {
+  env: cdkEnv,
+  envName: env,
+  description: `au Jibun Bank AI Agent — Web Chat API (U-08) (${env})`,
 });
 
 cdk.Tags.of(app).add('Project', 'au-jibun-bank-ai-agent');

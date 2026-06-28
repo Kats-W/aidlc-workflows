@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 from aws_lambda_powertools import Logger
@@ -48,6 +49,8 @@ EMBED_DIMENSIONS: int = 1024
 _THROTTLE_CODES: frozenset[str] = frozenset(
     {"ThrottlingException", "TooManyRequestsException", "ServiceQuotaExceededException"}
 )
+#: Sentinel yielded by the streaming helper when the event stream is exhausted.
+_STREAM_END: object = object()
 
 
 class BedrockClient:
@@ -183,6 +186,127 @@ class BedrockClient:
             extra={"chunks": len(context_chunks), "sources": len(source_urls)},
         )
         return answer, source_urls
+
+    def sources_for(self, context_chunks: list[dict[str, Any]]) -> list[str]:
+        """Return the de-duplicated source URLs backing ``context_chunks``.
+
+        Exposed so streaming callers (chat API) can emit the sources up front,
+        before any answer tokens, without re-implementing the dedupe logic.
+        """
+        return self._dedupe_sources(context_chunks)
+
+    async def generate_answer_stream(
+        self,
+        query: str,
+        context_chunks: list[dict[str, Any]],
+        history_text: str,
+        max_tokens: int = 1024,
+    ) -> AsyncIterator[str]:
+        """Yield Claude Haiku 4.5 answer text deltas over the retrieved context.
+
+        Same prompt and model as :meth:`generate_answer`, but uses Bedrock's
+        ``invoke_model_with_response_stream`` so callers can forward tokens to a
+        web client as they arrive (lower time-to-first-token). Source URLs are
+        not yielded here; obtain them up front via :meth:`sources_for`.
+
+        Raises:
+            BedrockThrottledError: If Bedrock throttles the request (retryable).
+            BedrockError: If the request fails or the stream errors.
+        """
+        if not query or not query.strip():
+            raise BedrockError("cannot generate an answer for empty query")
+
+        prompt = self._build_prompt(query, context_chunks, history_text)
+        payload = json.dumps(
+            {
+                "anthropic_version": ANTHROPIC_VERSION,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        )
+
+        def _open() -> Any:
+            try:
+                response = self._client.invoke_model_with_response_stream(
+                    modelId=RAG_ANSWER_MODEL_ID,
+                    accept="application/json",
+                    contentType="application/json",
+                    body=payload,
+                )
+            except ClientError as exc:
+                error = exc.response.get("Error", {})
+                code = error.get("Code", "")
+                detail = error.get("Message", "")
+                if code in _THROTTLE_CODES:
+                    raise BedrockThrottledError(
+                        f"Bedrock throttled generate_answer_stream: {code}"
+                    ) from exc
+                raise BedrockError(
+                    f"Bedrock generate_answer_stream failed: {code}: {detail}"
+                ) from exc
+            return iter(response["body"])
+
+        stream = await asyncio.to_thread(_open)
+
+        def _next() -> Any:
+            try:
+                return next(stream)
+            except StopIteration:
+                return _STREAM_END
+
+        emitted = False
+        while True:
+            event = await asyncio.to_thread(_next)
+            if event is _STREAM_END:
+                break
+            text = self._parse_stream_event(event)
+            if text:
+                emitted = True
+                yield text
+
+        if not emitted:
+            raise BedrockError("Bedrock stream returned an empty answer")
+        logger.info(
+            "streamed answer",
+            extra={"chunks": len(context_chunks)},
+        )
+
+    @staticmethod
+    def _parse_stream_event(event: dict[str, Any]) -> str:
+        """Extract a text delta from one Bedrock stream event.
+
+        Returns the delta text for ``content_block_delta`` events and ``""`` for
+        non-text events (message_start/stop, etc.). Raises on mid-stream error
+        events surfaced by Bedrock.
+
+        Raises:
+            BedrockThrottledError: On a mid-stream throttling event.
+            BedrockError: On any other mid-stream error event or malformed chunk.
+        """
+        for err_key, retryable in (
+            ("throttlingException", True),
+            ("modelStreamErrorException", False),
+            ("internalServerException", False),
+            ("validationException", False),
+        ):
+            if err_key in event:
+                msg = event[err_key].get("message", err_key)
+                if retryable:
+                    raise BedrockThrottledError(f"Bedrock stream throttled: {msg}")
+                raise BedrockError(f"Bedrock stream error: {msg}")
+
+        chunk = event.get("chunk")
+        if not chunk:
+            return ""
+        try:
+            data = json.loads(chunk["bytes"])
+        except (KeyError, ValueError, TypeError) as exc:
+            raise BedrockError("malformed Bedrock stream chunk") from exc
+        if data.get("type") == "content_block_delta":
+            delta = data.get("delta", {})
+            if delta.get("type") == "text_delta":
+                return str(delta.get("text", ""))
+        return ""
 
     async def generate_suggestion(self, category: str, max_chars: int = 200) -> str:
         """Generate a concise (<= ``max_chars``) improvement suggestion (U-06).
