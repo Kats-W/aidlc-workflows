@@ -433,3 +433,18 @@
       - 日本番号は業務利用＋事業者書類3点が必須（AWS サポートケース経由）で個人アカウントは適格外
       - テストは Connect テストチャット / Lex RecognizeText / RagHandler 直接 invoke で番号なしに実施可能
       - RagHandler 直接 invoke で RAG コア動作を再確認（hit:true、じぶん銀行実ソース付き回答）
+- [x] U-08 Web チャット（ストリーミング）新設（2026-06-28、PR #81-84）:
+      - chat-api（FastAPI + Lambda Web Adapter, Function URL RESPONSE_STREAM）で
+        既存 RAG パイプラインを Web 公開。SSE で sources→token*→done を逐次配信
+      - BedrockClient.generate_answer_stream / sources_for 追加
+      - chat-ui（独立 Vite/React）: fetch+ReadableStream で逐次表示・ソースリンク
+      - run.sh の PYTHONPATH 修正（layer の uvicorn を自前 spawn python に解決, PR #83）
+      - dev デプロイ・実機検証: /health ok、/chat ストリーミング・実回答を確認
+- [x] RAG ベクトルキャッシュ整合性バグの恒久修正（PR #84）:
+      - matrix.npy(129,861) と meta.json(129,863) のドリフトで RAG 全体が hit:false
+      - patch の stale-index 重複バグ修正、書き込み前整合性ガード、Embedder 直列化
+      - 一回限りフル再ビルド（130,213 件）で healing → RagHandler/chat-api とも hit:true 復帰
+- [x] 品質・レイテンシ評価（scripts/rag_eval, Phase C/D）:
+      - 15問でヒット率100%・ソース根拠100%・ハルシネーション制御100%
+      - ウォーム TTFT 中央値 ~1.5s、総時間中央値 ~4.2s
+- [x] ポートフォリオ文書（Phase E）: PROJECT.md（概要・アーキ図・評価・デモ）、rag_eval/README.md

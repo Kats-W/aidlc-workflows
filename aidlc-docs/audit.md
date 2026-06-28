@@ -2,6 +2,36 @@
 
 ---
 
+## Construction/Operations Phase — Web チャット（U-08）+ キャッシュ整合性修正（2026-06-28）
+
+**Timestamp**: 2026-06-28T06:10:00Z
+**User Input**: ポートフォリオ完成として、frontend チャット UI でデモ。回答品質・レイテンシ・ドキュメントを重視。
+**AI Response**: 既存 RAG パイプラインを Web に公開するストリーミング API + 顧客向けチャット UI を新規構築し、検証中に発見した RAG キャッシュ整合性バグを恒久修正。品質/レイテンシ評価とポートフォリオ文書も整備。
+
+**Phase A — ストリーミング Chat API（U-08, PR #81, #83）**:
+- `BedrockClient.generate_answer_stream`（`invoke_model_with_response_stream`）と `sources_for` を追加。
+- `src/chat_api`（FastAPI）: `POST /chat` が SSE（sources→token*→done、fallback/error）を配信。lifespan でベクトルキャッシュをウォーム。`x-demo-key` 簡易認証。
+- `ChatStack`: Python 3.12 + `run.sh` を Lambda Web Adapter 配下で起動、Function URL を `RESPONSE_STREAM` で公開。IAM は RagHandler 踏襲、reserved concurrency 3 + 生成デモキー。
+- デプロイ後不具合: `No module named uvicorn`（自前 spawn の python に layer の `/opt/python` が sys.path 未付与）→ `run.sh` で `PYTHONPATH` を明示（PR #83）。
+
+**Phase B — チャット UI（U-08, PR #82）**:
+- 独立 Vite/React アプリ `chat-ui/`。`fetch` + `ReadableStream` で SSE を逐次表示、ソースリンク表示。`npm run build` クリーン。
+
+**RAG キャッシュ整合性バグの発見・修正（PR #84）**:
+- 検証で chat-api・RagHandler とも `hit:false`。原因は S3 キャッシュの行数ドリフト（matrix.npy=129,861 / meta.json=129,863）。`ensure_cache_loaded` の整合性ガードが発火しコーパスが空に。
+- 根本原因: `vector_cache_store.patch()` の stale pre-delete index による重複 append、および Embedder 並行実行での非アトミック2オブジェクト upload 交錯。
+- 修正: 削除後に index 再構築、`_assert_consistent` を全 write/patch upload 前に適用、ドリフト base への patch を拒否、`EmbedderLambda` を reserved concurrency=1 で直列化。
+- 一回限りのフル再ビルド（scan_all 130,213 件 → build → write）で現行キャッシュを healing。RagHandler・chat-api とも `hit:true` に復帰。
+
+**Phase C/D — 品質・レイテンシ評価（`scripts/rag_eval`）**:
+- 15 問の評価で 回答ヒット率 100%、ソース根拠 100%、ハルシネーション制御（負例拒否）100%、ウォーム TTFT 中央値 ~1.5s、総時間中央値 ~4.2s。
+
+**Phase E — ポートフォリオ文書**: ルート `PROJECT.md`（概要・アーキ図・見どころ・評価結果・デモ手順）、`scripts/rag_eval/README.md` を追加。
+
+**Context**: CONSTRUCTION/OPERATIONS — Web チャット経路（音声と同一 RAG を共有）を新設し全層検証完了。RAG キャッシュ整合性を恒久修正し、品質/レイテンシを定量化。
+
+---
+
 ## Operations Phase — Connect 番号整理 + Lex 音声経路修正（2026-06-27）
 
 **Timestamp**: 2026-06-27T09:45:00Z
