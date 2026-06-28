@@ -11,6 +11,8 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "numpy>=1.26",
     "msgpack>=1.0",  # pickle の代替キャッシュ形式（U-02 で使用）
+    "fastapi>=0.110",  # chat_api: Web チャットのストリーミング API（U-08）
+    "uvicorn>=0.29",  # chat_api: Lambda Web Adapter 配下の ASGI サーバ
 ]
 
 [project.optional-dependencies]

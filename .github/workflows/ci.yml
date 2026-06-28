@@ -83,6 +83,7 @@ jobs:
           pip install \
             boto3 aioboto3 "aws-lambda-powertools>=2.0" httpx \
             beautifulsoup4 numpy msgpack \
+            fastapi uvicorn \
             -t ./lambda-layer/python \
             --platform manylinux2014_x86_64 \
             --python-version 3.12 \
@@ -115,6 +116,8 @@ jobs:
         run: npx cdk deploy AuJibunBank-dev-Improvement --context env=dev --require-approval never
       - name: Deploy Dashboard
         run: npx cdk deploy AuJibunBank-dev-Dashboard --context env=dev --require-approval never
+      - name: Deploy Chat
+        run: npx cdk deploy AuJibunBank-dev-Chat --context env=dev --require-approval never
       - name: Comment deploy result on merged PR
         if: always()
         env:
