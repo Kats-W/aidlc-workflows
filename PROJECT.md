@@ -38,16 +38,14 @@ flowchart LR
 
 ## スタック構成（CDK / ap-northeast-1）
 
-| Unit | スタック | 内容 |
-|------|----------|------|
-| U-01 | SharedInfra | KMS, DynamoDB×5, S3, Connect, **Lex v2**, Lambda Layer |
-| U-02 | KnowledgePipeline | Crawler + Embedder, EventBridge |
-| U-03 | Conversation | **RagHandler**, Personalizer, Escalation, CSAT |
-| U-04 | Omnichannel | ChannelSwitch, AI Contact Flow |
-| U-05 | Profile | CustomerProfile, CrmWriter |
-| U-06 | Improvement | ContactLens 分析, GapAnalyzer, SuggestionGenerator |
-| U-07 | Dashboard | Metrics/Suggestion API, Cognito, React ダッシュボード |
-| U-08 | **Chat** | **chat-api（FastAPI + Lambda Web Adapter, Function URL streaming）** |
+- **U-01 SharedInfra** — KMS, DynamoDB×5, S3, Connect, **Lex v2**, Lambda Layer
+- **U-02 KnowledgePipeline** — Crawler + Embedder, EventBridge
+- **U-03 Conversation** — **RagHandler**, Personalizer, Escalation, CSAT
+- **U-04 Omnichannel** — ChannelSwitch, AI Contact Flow
+- **U-05 Profile** — CustomerProfile, CrmWriter
+- **U-06 Improvement** — ContactLens 分析, GapAnalyzer, SuggestionGenerator
+- **U-07 Dashboard** — Metrics/Suggestion API, Cognito, React ダッシュボード
+- **U-08 Chat** — **chat-api（FastAPI + Lambda Web Adapter, Function URL streaming）**
 
 ## エンジニアリングの見どころ
 
@@ -71,13 +69,11 @@ flowchart LR
 
 `scripts/rag_eval` を 15 問で実行:
 
-| 指標 | 結果 |
-|------|------|
-| 回答ヒット率 | **100%** (14/14) |
-| ソース根拠率 | **100%**（全回答に jibunbank.co.jp 出典） |
-| ハルシネーション制御 | **100%**（無意味な入力を正しく拒否） |
-| TTFT（ウォーム中央値） | **~1.5 秒** |
-| 総時間（中央値） | ~4.2 秒 |
+- **回答ヒット率**: **100%** (14/14)
+- **ソース根拠率**: **100%**（全回答に jibunbank.co.jp 出典）
+- **ハルシネーション制御**: **100%**（無意味な入力を正しく拒否）
+- **TTFT（ウォーム中央値）**: **~1.5 秒**
+- **総時間（中央値）**: ~4.2 秒
 
 ## デモ
 
