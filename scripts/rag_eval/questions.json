@@ -1,0 +1,17 @@
+[
+  { "id": "loan-rate", "question": "住宅ローンの金利について教えてください", "keywords": ["金利", "住宅ローン"] },
+  { "id": "loan-types", "question": "住宅ローンの変動金利と固定金利の違いは？", "keywords": ["変動", "固定"] },
+  { "id": "fx-deposit", "question": "外貨預金の手数料はいくらですか？", "keywords": ["外貨", "手数料"] },
+  { "id": "account-open", "question": "口座開設の方法を教えてください", "keywords": ["口座", "開設"] },
+  { "id": "transfer-fee", "question": "他行への振込手数料はいくらですか？", "keywords": ["振込", "手数料"] },
+  { "id": "atm-fee", "question": "ATMの利用手数料について知りたいです", "keywords": ["ATM", "手数料"] },
+  { "id": "card-loan", "question": "カードローンの金利と限度額を教えてください", "keywords": ["カードローン"] },
+  { "id": "time-deposit", "question": "円定期預金の金利はどのくらいですか？", "keywords": ["定期", "金利"] },
+  { "id": "debit", "question": "デビットカードのポイント還元について教えてください", "keywords": ["デビット"] },
+  { "id": "security", "question": "不正利用に気づいたらどうすればいいですか？", "keywords": ["不正"] },
+  { "id": "app-login", "question": "アプリにログインできない場合の対処法は？", "keywords": ["ログイン", "アプリ"] },
+  { "id": "interest-tax", "question": "預金利息にかかる税金について教えてください", "keywords": ["利息", "税"] },
+  { "id": "foreign-remit", "question": "海外送金はできますか？手数料も知りたいです", "keywords": ["海外", "送金"] },
+  { "id": "nisa", "question": "NISA口座の開設方法を教えてください", "keywords": ["NISA"] },
+  { "id": "gibberish", "question": "あqwsxzポーション宇宙猫ランダム文字列xyzzy", "keywords": [], "expect_miss": true }
+]
