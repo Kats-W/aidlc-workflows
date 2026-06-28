@@ -14,17 +14,15 @@ uv run python scripts/rag_eval/evaluate.py
 
 ## 計測指標
 
-| 指標 | 意味 |
-|------|------|
-| **hit-rate** | fallback ではなく根拠ある回答を返した割合 |
-| **source-grounded** | 回答に jibunbank.co.jp のソースが1件以上付いた割合 |
-| **negative control** | 無意味な入力（`expect_miss`）を正しく「わかりかねます」で拒否した割合（ハルシネーション検査） |
-| **TTFT** | 最初のトークン到達時間（ユーザーが体感するレイテンシ）。ストリーミングの主効果 |
-| **total** | 最終トークンまでの総時間 |
+- **hit-rate** — fallback ではなく根拠ある回答を返した割合
+- **source-grounded** — 回答に jibunbank.co.jp のソースが1件以上付いた割合
+- **negative control** — 無意味な入力（`expect_miss`）を正しく「わかりかねます」で拒否した割合（ハルシネーション検査）
+- **TTFT** — 最初のトークン到達時間（ユーザーが体感するレイテンシ）。ストリーミングの主効果
+- **total** — 最終トークンまでの総時間
 
 ## 参考結果（2026-06-28, dev・キャッシュ再ビルド後）
 
-```
+```text
 answerable hit-rate : 100% (14/14)
 source-grounded     : 100% (>=1 jibunbank source)
 negative control    : 100% declined as expected

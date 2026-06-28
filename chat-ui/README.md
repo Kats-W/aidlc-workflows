@@ -16,10 +16,8 @@ npm run dev   # http://localhost:5174
 
 ## 環境変数
 
-| 変数 | 取得元 |
-|------|--------|
-| `VITE_CHAT_ENDPOINT` | ChatStack の CfnOutput `ChatApiUrl`（Function URL） |
-| `VITE_DEMO_KEY` | `aws secretsmanager get-secret-value --secret-id au-jibun-bank-dev-chat-demo-key --query SecretString --output text` |
+- `VITE_CHAT_ENDPOINT` — ChatStack の CfnOutput `ChatApiUrl`（Function URL）
+- `VITE_DEMO_KEY` — `aws secretsmanager get-secret-value --secret-id au-jibun-bank-dev-chat-demo-key --query SecretString --output text` で取得
 
 ## 仕組み
 
