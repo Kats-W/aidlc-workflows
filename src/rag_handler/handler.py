@@ -39,8 +39,12 @@ logger = Logger()
 PIPELINE_BUDGET_SECONDS: float = 6.0
 #: Number of context chunks to retrieve.
 TOP_K: int = 5
-#: Minimum cosine score for a hit to count as a usable match.
-MIN_HIT_SCORE: float = 0.3
+#: Minimum cosine score for a hit to count as a usable match. Raised from 0.3
+#: to 0.40 after an LLM-judge evaluation showed low-relevance (off-topic) chunks
+#: passing the old threshold and inducing misattribution/hallucination (e.g. a
+#: transfer-fee question answered from foreign-exchange-fee context). A higher
+#: bar makes the pipeline decline (hedge) rather than fabricate.
+MIN_HIT_SCORE: float = 0.40
 #: Max tokens for the RAG answer. Kept short for voice-channel latency (the
 #: 6s pipeline budget) and TTS readability.
 ANSWER_MAX_TOKENS: int = 400
