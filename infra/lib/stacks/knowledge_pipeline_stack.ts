@@ -92,7 +92,7 @@ export class KnowledgePipelineStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.vector_store.handler.lambda_handler',
       code: lambda.Code.fromAsset('..', {
-        exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
+        exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv', 'frontend', 'chat-ui', 'docs', 'scripts', '**/node_modules'],
       }),
       layers: [pythonDepsLayer],
       // 15 minutes (the Lambda hard maximum, was 10): the final-batch cache
@@ -124,7 +124,7 @@ export class KnowledgePipelineStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'src.crawler.handler.lambda_handler',
       code: lambda.Code.fromAsset('..', {
-        exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
+        exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv', 'frontend', 'chat-ui', 'docs', 'scripts', '**/node_modules'],
       }),
       layers: [pythonDepsLayer],
       timeout: cdk.Duration.minutes(15),
@@ -185,14 +185,15 @@ export class KnowledgePipelineStack extends cdk.Stack {
       }),
     );
     // TEMPORARY: lets the crawler re-invoke itself for the one-time auto-continue
-    // drain (event {"autoContinue": true}). Remove with the handler block once
-    // the initial full crawl has completed.
+    // drain (event {"autoContinue": true}). The ARN is built from the known
+    // function name (not crawler.functionArn) to avoid a role<->function circular
+    // dependency. Remove with the handler block once the initial crawl completes.
     crawlerRole.addToPolicy(
       new iam.PolicyStatement({
         sid: 'SelfInvokeAutoContinue',
         effect: iam.Effect.ALLOW,
         actions: ['lambda:InvokeFunction'],
-        resources: [crawler.functionArn],
+        resources: [`arn:aws:lambda:${this.region}:${account}:function:${prefix}-crawler`],
       }),
     );
     cmk.grantEncryptDecrypt(crawlerRole);

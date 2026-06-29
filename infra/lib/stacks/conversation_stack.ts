@@ -84,7 +84,7 @@ export class ConversationStack extends cdk.Stack {
 
     const code = lambda.Code.fromAsset('..', {
       // In CI the deployment package is built by `uv`; placeholder bundling.
-      exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv'],
+      exclude: ['infra', 'tests', 'aidlc-docs', '.git', '.venv', 'frontend', 'chat-ui', 'docs', 'scripts', '**/node_modules'],
     });
 
     // -----------------------------------------------------------------------
