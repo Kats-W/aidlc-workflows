@@ -58,9 +58,14 @@ export function App() {
   return (
     <div className="app">
       <header className="header">
-        <div className="brand">au じぶん銀行</div>
-        <div className="subtitle">AI アシスタント（デモ）</div>
+        <div className="brand">AI カスタマーサポート</div>
+        <div className="subtitle">日本語 RAG 技術デモ</div>
       </header>
+
+      <div className="notice" role="note">
+        ⚠️ 非公式の技術デモです。実在の金融機関とは一切関係がなく、回答は AI 生成のため
+        正確性を保証しません。
+      </div>
 
       <div className="messages" ref={scrollRef}>
         {messages.length === 0 && (
@@ -131,7 +136,7 @@ export function App() {
         </button>
       </form>
       <footer className="disclaimer">
-        本デモの回答は AI が生成したものです。正確性は各公式ページでご確認ください。
+        非公式の技術デモ｜実在の金融機関とは無関係です。回答は AI 生成のため正確性は保証されません。
       </footer>
     </div>
   );

@@ -1,12 +1,26 @@
-# au じぶん銀行 AI エージェント
+# 日本語音声 RAG カスタマーサポート AI エージェント（技術デモ）
 
 Amazon Connect ベースの**日本語音声 RAG カスタマーサポート**と、その**顧客向け Web チャット版**。
-電話・チャットの問い合わせを、じぶん銀行の公開情報（~130,000 チャンク）に基づき
-Claude が回答し、答えられない場合は人間オペレーターへエスカレーションします。
+電話・チャットの問い合わせを、公開ウェブ情報（~130,000 チャンク）に基づき Claude が回答し、
+答えられない場合は人間オペレーターへエスカレーションします。
 
-> このリポジトリは AI-DLC（AI-Driven Development Life Cycle）ワークフローで構築した
-> 実装です。本ファイルはプロジェクト（成果物）の概要、ルート `README.md` は AI-DLC
-> フレームワーク自体の説明です。
+> ## ⚠️ 免責事項 / Disclaimer
+>
+> 本リポジトリは **個人が技術検証目的で作成した非公式のデモ**です。
+> 題材として実在金融機関のサービス名・公開ウェブ情報を参照していますが、
+> **「au じぶん銀行」および KDDI / auフィナンシャルグループとは一切関係がなく、
+> 同行が許諾・推奨・関与するものではありません。** 各種名称・ロゴ等は各権利者の商標です。
+> 取り込んだ公開情報は**非営利の技術デモ目的のみ**で使用しており、回答は AI 生成のため
+> 正確性を保証しません。実際の商品情報は各社公式サイトをご確認ください。
+>
+> This is an **independent, unofficial technical demo / portfolio project**. It is
+> **not affiliated with, authorized, or endorsed by au Jibun Bank or KDDI**. All
+> names and marks belong to their respective owners; public content is used only
+> for a non-commercial demonstration and AI-generated answers may be inaccurate.
+
+_補足: このリポジトリは AI-DLC（AI-Driven Development Life Cycle）ワークフローで構築した
+実装です。本ファイルはプロジェクト（成果物）の概要、ルート `README.md` は AI-DLC
+フレームワーク自体の説明です。_
 
 ## デモ（Web チャット）
 
