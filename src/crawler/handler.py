@@ -127,14 +127,22 @@ async def _load_state(
     return _initial_state(loaded, seeds)
 
 
-async def _fetch(client: httpx.AsyncClient, url: str) -> tuple[str, str]:
-    """Fetch a single URL's body and Content-Type, raising FetchTimeoutError on failure."""
+async def _fetch(client: httpx.AsyncClient, url: str) -> tuple[bytes, str]:
+    """Fetch a single URL's raw body bytes and Content-Type.
+
+    Returns raw bytes (not ``response.text``) so the parser's BeautifulSoup can
+    detect the page encoding from its ``<meta charset>``. Some legacy sections
+    (e.g. /pc/business/) are Shift_JIS with no HTTP charset header, which httpx
+    would otherwise mis-decode into mojibake.
+
+    Raises FetchTimeoutError on failure.
+    """
     try:
         response = await client.get(url)
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise FetchTimeoutError(f"failed to fetch {url}") from exc
-    return response.text, response.headers.get("content-type", "")
+    return response.content, response.headers.get("content-type", "")
 
 
 async def _crawl_url(
@@ -143,16 +151,16 @@ async def _crawl_url(
     guard: RobotsTxtGuard,
     parser: ContentParser,
     store: S3ContentStore,
-) -> tuple[list[ContentChunk], str]:
-    """Fetch, parse, and store one URL. Returns (chunks, raw_html)."""
+) -> tuple[list[ContentChunk], bytes]:
+    """Fetch, parse, and store one URL. Returns (chunks, raw_html_bytes)."""
     if not guard.is_allowed(url):
         logger.info("robots disallowed, skipping", extra={"url": url})
-        return [], ""
+        return [], b""
 
     html, content_type = await _fetch(client, url)
     if not any(ct in content_type.lower() for ct in _HTML_CONTENT_TYPES):
         logger.info("non-HTML content, skipping", extra={"url": url, "content_type": content_type})
-        return [], ""
+        return [], b""
 
     chunks = parser.parse(html, url)
     url_hash = parser.compute_hash(url)
@@ -179,6 +187,7 @@ def _invoke_embedder(result: DiffResult) -> None:
             "index": c.index,
             "text": c.text,
             "contentHash": c.content_hash,
+            "title": c.title,
         }
         for c in (*result.added, *result.changed)
     ]

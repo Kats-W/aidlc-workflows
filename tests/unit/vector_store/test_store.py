@@ -108,7 +108,10 @@ async def test_batch_get_texts(vector_table) -> None:  # type: ignore[no-untyped
     await store.upsert(_chunk("a#0"), [0.1, 0.2])
     await store.upsert(_chunk("a#1"), [0.3, 0.4])
     texts = await store.batch_get_texts(["a#0", "a#1"])
-    assert texts == {"a#0": "text-a#0", "a#1": "text-a#1"}
+    assert texts == {
+        "a#0": {"text": "text-a#0", "title": ""},
+        "a#1": {"text": "text-a#1", "title": ""},
+    }
 
 
 async def test_batch_get_texts_empty(vector_table) -> None:  # type: ignore[no-untyped-def]
@@ -120,4 +123,4 @@ async def test_batch_get_texts_missing_key(vector_table) -> None:  # type: ignor
     store = VectorStore(table=vector_table)
     await store.upsert(_chunk("a#0"), [0.1, 0.2])
     texts = await store.batch_get_texts(["a#0", "missing"])
-    assert texts == {"a#0": "text-a#0"}
+    assert texts == {"a#0": {"text": "text-a#0", "title": ""}}

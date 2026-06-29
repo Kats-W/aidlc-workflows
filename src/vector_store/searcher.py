@@ -45,6 +45,7 @@ class SearchHit:
     source_url: str
     text: str
     score: float
+    title: str = ""
 
 
 class CosineSimilaritySearcher:
@@ -88,8 +89,9 @@ class CosineSimilaritySearcher:
             SearchHit(
                 chunk_id=meta[i]["chunkId"],
                 source_url=meta[i].get("sourceUrl", ""),
-                text=texts.get(meta[i]["chunkId"], ""),
+                text=texts.get(meta[i]["chunkId"], {}).get("text", ""),
                 score=float(scores[i]),
+                title=texts.get(meta[i]["chunkId"], {}).get("title", ""),
             )
             for i in top_indices
         ]

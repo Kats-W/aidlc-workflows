@@ -7,8 +7,13 @@
 //   event: done    -> { hit }    (stream complete)
 //   event: error   -> message
 
+export interface Source {
+  url: string;
+  title: string;
+}
+
 export interface ChatCallbacks {
-  onSources?: (urls: string[]) => void;
+  onSources?: (sources: Source[]) => void;
   onToken?: (text: string) => void;
   onDone?: (info: { hit: boolean }) => void;
   onError?: (message: string) => void;
@@ -82,7 +87,7 @@ function dispatch(frame: string, cb: ChatCallbacks): void {
 
   switch (event) {
     case 'sources':
-      cb.onSources?.(parsed as string[]);
+      cb.onSources?.(parsed as Source[]);
       break;
     case 'token':
       cb.onToken?.(parsed as string);
