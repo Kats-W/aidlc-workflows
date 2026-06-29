@@ -86,6 +86,7 @@ class VectorStore:
                         "chunkId": chunk.chunk_id,
                         "sourceUrl": chunk.source_url,
                         "text": chunk.text,
+                        "title": chunk.title,
                         "contentHash": chunk.content_hash,
                         "embedding": _to_decimal_list(vector),
                     }
@@ -120,29 +121,35 @@ class VectorStore:
 
         await asyncio.to_thread(_warm)
 
-    async def batch_get_texts(self, chunk_ids: list[str]) -> dict[str, str]:
-        """Fetch ``text`` for a small set of chunk IDs via ``BatchGetItem``."""
+    async def batch_get_texts(self, chunk_ids: list[str]) -> dict[str, dict[str, str]]:
+        """Fetch ``text`` and ``title`` for a small set of chunk IDs.
+
+        Returns ``{chunkId: {"text": ..., "title": ...}}`` (title may be "").
+        """
 
         if not chunk_ids:
             return {}
 
-        def _get() -> dict[str, str]:
+        def _get() -> dict[str, dict[str, str]]:
             try:
                 response = self._client.batch_get_item(
                     RequestItems={
                         self._table_name: {
                             "Keys": [{"chunkId": {"S": cid}} for cid in chunk_ids],
-                            "ProjectionExpression": "chunkId, #t",
+                            "ProjectionExpression": "chunkId, #t, title",
                             "ExpressionAttributeNames": {"#t": "text"},
                         }
                     }
                 )
             except ClientError as exc:
                 raise DynamoAccessError("failed to batch_get_texts") from exc
-            result: dict[str, str] = {}
+            result: dict[str, dict[str, str]] = {}
             for item in response.get("Responses", {}).get(self._table_name, []):
                 cid = item["chunkId"]["S"]
-                result[cid] = item.get("text", {}).get("S", "")
+                result[cid] = {
+                    "text": item.get("text", {}).get("S", ""),
+                    "title": item.get("title", {}).get("S", ""),
+                }
             return result
 
         return await asyncio.to_thread(_get)

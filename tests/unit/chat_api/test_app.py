@@ -72,7 +72,10 @@ class _FakeSearcher:
 
 
 def _hit(score: float, url: str = "https://jibun/loan") -> SearchHit:
-    return SearchHit(chunk_id="c1", source_url=url, text="住宅ローンの金利情報", score=score)
+    return SearchHit(
+        chunk_id="c1", source_url=url, text="住宅ローンの金利情報", score=score,
+        title="住宅ローン - じぶん銀行",
+    )
 
 
 def _install(
@@ -120,7 +123,9 @@ def test_chat_streams_sources_tokens_done(monkeypatch: pytest.MonkeyPatch) -> No
     kinds = [e for e, _ in events]
     assert kinds[0] == "sources"
     assert kinds[-1] == "done"
-    assert dict(events)["sources"] == ["https://jibun/loan"]
+    assert dict(events)["sources"] == [
+        {"url": "https://jibun/loan", "title": "住宅ローン - じぶん銀行"}
+    ]
     tokens = "".join(d for e, d in events if e == "token")
     assert tokens == "住宅ローンの金利は変動と固定"
     assert dict(events)["done"] == {"hit": True}
@@ -139,7 +144,7 @@ def test_chat_no_usable_hits_returns_fallback(monkeypatch: pytest.MonkeyPatch) -
     assert ("sources", []) in events
     assert dict(events)["done"] == {"hit": False}
     tokens = "".join(d for e, d in events if e == "token")
-    assert "オペレーター" in tokens  # FALLBACK_ANSWER
+    assert "情報が見つかりませんでした" in tokens  # CHAT_FALLBACK (no operator promise)
 
 
 def test_chat_midstream_error_emits_error_event(monkeypatch: pytest.MonkeyPatch) -> None:

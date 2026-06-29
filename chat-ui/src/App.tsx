@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { streamChat } from './api/chatClient';
+import { streamChat, type Source } from './api/chatClient';
 
 interface Message {
   role: 'user' | 'assistant';
   text: string;
-  sources?: string[];
+  sources?: Source[];
   streaming?: boolean;
   error?: boolean;
 }
@@ -46,7 +46,7 @@ export function App() {
       });
 
     await streamChat(message, sessionId.current, {
-      onSources: (urls) => patchLast((m) => ({ ...m, sources: urls })),
+      onSources: (sources) => patchLast((m) => ({ ...m, sources })),
       onToken: (t) => patchLast((m) => ({ ...m, text: m.text + t })),
       onDone: () => patchLast((m) => ({ ...m, streaming: false })),
       onError: (msg) =>
@@ -101,10 +101,10 @@ export function App() {
                 <div className="sources">
                   <span className="sources-label">参照元</span>
                   <ul>
-                    {m.sources.map((u) => (
-                      <li key={u}>
-                        <a href={u} target="_blank" rel="noreferrer">
-                          {u}
+                    {m.sources.map((s) => (
+                      <li key={s.url}>
+                        <a href={s.url} target="_blank" rel="noreferrer" title={s.url}>
+                          {s.title || s.url}
                         </a>
                       </li>
                     ))}

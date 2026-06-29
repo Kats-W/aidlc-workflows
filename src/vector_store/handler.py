@@ -48,6 +48,7 @@ def _to_chunk(item: dict[str, Any]) -> ContentChunk:
         index=int(item.get("index", 0)),
         text=item.get("text", ""),
         content_hash=item.get("contentHash", ""),
+        title=item.get("title", ""),
     )
 
 

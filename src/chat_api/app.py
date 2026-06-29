@@ -33,7 +33,6 @@ from src.common.errors import AppError
 from src.common.pii_masker import PiiMasker
 from src.rag_handler.handler import (
     ANONYMOUS,
-    FALLBACK_ANSWER,
     MIN_HIT_SCORE,
     TOP_K,
 )
@@ -48,6 +47,13 @@ logger = Logger()
 #: Max answer tokens for the chat channel. Higher than the voice path's 400
 #: (no 6s budget here) but still bounded so answers stay concise and fast.
 CHAT_ANSWER_MAX_TOKENS: int = 700
+
+#: No-hit fallback for the web chat. Unlike the voice path's FALLBACK_ANSWER it
+#: does not promise an operator handoff (the demo has no escalation channel).
+CHAT_FALLBACK: str = (
+    "申し訳ございません。ご質問に正確にお答えできる情報が見つかりませんでした。"
+    "お手数ですが、表現を変えてもう一度お試しください。"
+)
 
 #: Shared searcher (holds the in-memory / S3 vector cache). Built once at
 #: startup so warm invocations skip the multi-hundred-MB cache load.
@@ -121,12 +127,18 @@ async def _event_stream(message: str, session_id: str | None) -> AsyncIterator[s
         usable = [h for h in hits if h.score >= MIN_HIT_SCORE]
         if not usable:
             yield _sse("sources", [])
-            yield _sse("token", FALLBACK_ANSWER)
+            yield _sse("token", CHAT_FALLBACK)
             yield _sse("done", {"hit": False})
             return
 
         chunks = [{"text": h.text, "source_url": h.source_url} for h in usable]
-        yield _sse("sources", bedrock.sources_for(chunks))
+        # Emit sources as {url, title} (deduped by url, first title wins) so the
+        # UI can show a human-readable page title instead of a bare URL.
+        seen: dict[str, str] = {}
+        for h in usable:
+            if h.source_url and h.source_url not in seen:
+                seen[h.source_url] = h.title or ""
+        yield _sse("sources", [{"url": u, "title": t} for u, t in seen.items()])
 
         parts: list[str] = []
         async for delta in bedrock.generate_answer_stream(

@@ -99,7 +99,12 @@ def main() -> int:
             hit = bool(answer) and "オペレーターにおつなぎ" not in answer
             kw = q.get("keywords", [])
             kw_hits = sum(1 for k in kw if k in answer)
-            jibun = sum(1 for s in r["sources"] if "jibunbank.co.jp" in s)
+            # sources are {"url","title"} objects (older runs returned bare URLs).
+            jibun = sum(
+                1
+                for s in r["sources"]
+                if "jibunbank.co.jp" in (s.get("url", "") if isinstance(s, dict) else s)
+            )
             ok = (not q.get("expect_miss")) == hit  # negative control should miss
             rows.append({
                 "id": q["id"], "hit": hit, "expect_miss": q.get("expect_miss", False),

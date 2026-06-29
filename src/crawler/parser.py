@@ -45,6 +45,8 @@ class ContentChunk:
     index: int
     text: str
     content_hash: str = field(default="")
+    #: The page's <title> (for human-readable source attribution in the UI).
+    title: str = field(default="")
 
 
 class ContentParser:
@@ -60,8 +62,12 @@ class ContentParser:
         self._max_chars = max_chars
         self._overlap_chars = overlap_chars
 
-    def parse(self, raw_html: str, source_url: str) -> list[ContentChunk]:
+    def parse(self, raw_html: bytes | str, source_url: str) -> list[ContentChunk]:
         """Parse ``raw_html`` into a list of hashed :class:`ContentChunk`.
+
+        ``raw_html`` may be raw bytes; BeautifulSoup then detects the page
+        encoding from its ``<meta charset>`` (some legacy sections are Shift_JIS
+        with no HTTP charset header, which httpx would otherwise mis-decode).
 
         Raises:
             ParseError: If the HTML yields no extractable body text.
@@ -69,6 +75,7 @@ class ContentParser:
         text = self._extract_text(raw_html)
         if not text:
             raise ParseError(f"no extractable text for {source_url}")
+        title = self._extract_title(raw_html)
 
         url_hash = self.compute_hash(source_url)
         chunks: list[ContentChunk] = []
@@ -80,6 +87,7 @@ class ContentParser:
                     index=index,
                     text=piece,
                     content_hash=self.compute_hash(piece),
+                    title=title,
                 )
             )
         logger.debug("parsed page", extra={"source_url": source_url, "chunks": len(chunks)})
@@ -89,7 +97,7 @@ class ContentParser:
         """Return the SHA-256 hex digest of ``text`` (UTF-8 encoded)."""
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def extract_links(self, html: str, base_url: str) -> list[str]:
+    def extract_links(self, html: bytes | str, base_url: str) -> list[str]:
         """Return absolute HTTP/HTTPS links found in ``html``, resolved against ``base_url``.
 
         Fragments are stripped; query strings are preserved.
@@ -107,7 +115,17 @@ class ContentParser:
                 links.append(parsed._replace(fragment="").geturl())
         return links
 
-    def _extract_text(self, html: str) -> str:
+    def _extract_title(self, html: bytes | str) -> str:
+        """Return the page's <title> text (collapsed whitespace), or ""."""
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+        except Exception:  # title is optional metadata; never fail on it
+            return ""
+        if soup.title and soup.title.string:
+            return re.sub(r"[\s　]+", " ", soup.title.string).strip()
+        return ""
+
+    def _extract_text(self, html: bytes | str) -> str:
         """Extract and normalise the visible body text from ``html``."""
         try:
             soup = BeautifulSoup(html, "html.parser")

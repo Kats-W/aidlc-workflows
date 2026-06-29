@@ -44,6 +44,26 @@ def test_chunk_ids_and_hashes() -> None:
     assert chunks[0].content_hash == parser.compute_hash(chunks[0].text)
 
 
+def test_parse_extracts_page_title() -> None:
+    parser = ContentParser()
+    chunks = parser.parse(SAMPLE_HTML, "https://www.jibunbank.co.jp/faq/")
+    assert all(c.title == "FAQ" for c in chunks)
+
+
+def test_parse_decodes_shift_jis_bytes() -> None:
+    """Legacy Shift_JIS pages (meta charset, no HTTP header) must decode cleanly
+    when raw bytes are passed — the mojibake fix."""
+    html = (
+        '<html><head><meta charset="shift_jis"><title>携帯電話番号の再設定</title>'
+        "</head><body><p>暗証番号と携帯電話番号の再設定をご希望の場合</p></body></html>"
+    )
+    raw = html.encode("shift_jis")
+    chunks = ContentParser().parse(raw, "https://www.jibunbank.co.jp/pc/business/x.html")
+    assert "携帯電話番号の再設定をご希望の場合" in chunks[0].text
+    assert "�" not in chunks[0].text  # no replacement char
+    assert chunks[0].title == "携帯電話番号の再設定"
+
+
 def test_compute_hash_matches_sha256() -> None:
     parser = ContentParser()
     text = "テスト本文"
