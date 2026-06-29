@@ -132,6 +132,47 @@ body {
   50% { opacity: 1; }
 }
 
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 12px 0 6px;
+}
+
+.markdown p {
+  margin: 6px 0;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.markdown li {
+  margin: 2px 0;
+}
+
+.markdown a {
+  color: #2563eb;
+}
+
+.markdown code {
+  background: #f0f1f3;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
 .sources {
   margin-top: 10px;
   padding-top: 8px;

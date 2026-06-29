@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { streamChat } from './api/chatClient';
 
 interface Message {
@@ -78,7 +79,19 @@ export function App() {
         {messages.map((m, i) => (
           <div key={i} className={`row ${m.role}`}>
             <div className={`bubble ${m.role} ${m.error ? 'error' : ''}`}>
-              {m.text || (m.streaming ? <span className="dots">●●●</span> : '')}
+              {m.text ? (
+                m.role === 'assistant' && !m.error ? (
+                  <div className="markdown">
+                    <ReactMarkdown>{m.text}</ReactMarkdown>
+                  </div>
+                ) : (
+                  m.text
+                )
+              ) : m.streaming ? (
+                <span className="dots">●●●</span>
+              ) : (
+                ''
+              )}
               {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
                 <div className="sources">
                   <span className="sources-label">参照元</span>
