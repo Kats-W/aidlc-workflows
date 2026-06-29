@@ -184,6 +184,17 @@ export class KnowledgePipelineStack extends cdk.Stack {
         resources: [embedder.functionArn],
       }),
     );
+    // TEMPORARY: lets the crawler re-invoke itself for the one-time auto-continue
+    // drain (event {"autoContinue": true}). Remove with the handler block once
+    // the initial full crawl has completed.
+    crawlerRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'SelfInvokeAutoContinue',
+        effect: iam.Effect.ALLOW,
+        actions: ['lambda:InvokeFunction'],
+        resources: [crawler.functionArn],
+      }),
+    );
     cmk.grantEncryptDecrypt(crawlerRole);
 
     // Embedder: read/write VectorStore, read S3 content, invoke Bedrock embed.

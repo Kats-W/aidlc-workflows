@@ -50,6 +50,10 @@ _MIN_DELAY_SECONDS: float = 1.0
 _MAX_DELAY_SECONDS: float = 3.0
 # Stop enqueueing new pages this many ms before the Lambda deadline.
 _TIMEOUT_MARGIN_MS: int = 60_000
+# --- TEMPORARY: one-time auto-continue drain (remove after initial crawl) ----
+# Safety cap on chained self-invocations (~15 min each) so the drain can never
+# loop forever. ~60 chains ≈ up to ~15h, well beyond the expected ~3-8h.
+_AUTO_CONTINUE_MAX_CHAINS: int = 60
 # FAQ host: distinct articles are addressed via the `id` query parameter, so
 # it must be preserved. All other query parameters (tracking/session params)
 # are dropped to avoid a crawler-trap explosion of near-duplicate URLs.
@@ -311,7 +315,40 @@ async def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "errors": errors,
     }
     logger.info("crawl finished", extra=summary)
+    _maybe_self_continue(event, context, len(queue))
     return summary
+
+
+def _maybe_self_continue(event: dict[str, Any], context: Any, remaining_queue: int) -> None:
+    """TEMPORARY: one-time auto-continue drain of the BFS frontier.
+
+    When invoked with ``{"autoContinue": true}`` and the queue is not yet empty,
+    asynchronously re-invokes this same function to continue crawling, bounded by
+    ``chainsLeft`` (default :data:`_AUTO_CONTINUE_MAX_CHAINS`). The weekly
+    scheduled crawl sends no flag, so it never self-continues. Remove this block
+    (and the self-invoke IAM grant) once the initial full crawl has completed.
+    """
+    if not event.get("autoContinue"):
+        return
+    if remaining_queue <= 0:
+        logger.info("auto-continue: queue drained — initial crawl complete")
+        return
+    chains_left = int(event.get("chainsLeft", _AUTO_CONTINUE_MAX_CHAINS))
+    if chains_left <= 0:
+        logger.warning(
+            "auto-continue: chain cap reached — stopping",
+            extra={"remaining_queue": remaining_queue},
+        )
+        return
+    boto3.client("lambda").invoke(
+        FunctionName=context.function_name,
+        InvocationType="Event",
+        Payload=json.dumps({"autoContinue": True, "chainsLeft": chains_left - 1}).encode(),
+    )
+    logger.info(
+        "auto-continue: re-invoked self",
+        extra={"chains_left": chains_left - 1, "remaining_queue": remaining_queue},
+    )
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
