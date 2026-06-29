@@ -455,3 +455,9 @@
 - [x] ポートフォリオ文書（Phase E）: PROJECT.md（概要・アーキ図・評価・デモ GIF）、rag_eval/README.md
 - [x] chat-ui の Markdown レンダリング追加（react-markdown, PR #89）で回答表示を整形
 - [x] ブラウザ CORS 二重 ACAO ヘッダ修正（FastAPI CORSMiddleware 除去, PR #87）
+- [x] コーパスの非HTMLパージ（scripts/purge_non_html.py, 2026-06-29）:
+      - クロール実態: 週次・1周目未完（visited 9,547 / queue 6,176）。「2周目で是正」は誤認
+      - コーパスの84%がPDF・4%がPNG（スキップ導入前の残留、インクリメンタルでは消えない）
+      - vector-store 130,213→15,209、content-diff →15,423（PDF/PNG=0）、キャッシュ 531MB→62MB
+      - パージ後 LLM-judge は調整後とほぼ同水準（この14トピックは元々HTMLを取得、PDFはtop-5外）
+- [ ] 残課題: 1周目クロール完了（残6,176 URL）、コラム相場表のチャンク品質改善（数値取り違え）
