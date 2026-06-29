@@ -445,6 +445,13 @@
       - patch の stale-index 重複バグ修正、書き込み前整合性ガード、Embedder 直列化
       - 一回限りフル再ビルド（130,213 件）で healing → RagHandler/chat-api とも hit:true 復帰
 - [x] 品質・レイテンシ評価（scripts/rag_eval, Phase C/D）:
-      - 15問でヒット率100%・ソース根拠100%・ハルシネーション制御100%
-      - ウォーム TTFT 中央値 ~1.5s、総時間中央値 ~4.2s
-- [x] ポートフォリオ文書（Phase E）: PROJECT.md（概要・アーキ図・評価・デモ）、rag_eval/README.md
+      - 当初の「ヒット率100%」はヒット有無のみで品質を測れておらず誤解を招く指標だった
+      - LLM-as-judge（judge_eval.py, Claude Sonnet）で忠実性/有用性を実測し直し、
+        検索診断（inspect_retrieval.py）で無関係文脈の混入を特定
+      - MIN_HIT_SCORE 0.30→0.40 + プロンプト強化で改善（PR #88）:
+        忠実性 4.14→4.71、有用性 3.79→3.57、的確(≥4/≥4) 57%→71%、ハルシネーション 3→0 件
+      - 残 29% は捏造でなくコーパス欠落で安全に hedge（次策: headless クロール）
+      - レイテンシ: ウォーム TTFT 中央値 ~1.5s、総時間中央値 ~4.2s
+- [x] ポートフォリオ文書（Phase E）: PROJECT.md（概要・アーキ図・評価・デモ GIF）、rag_eval/README.md
+- [x] chat-ui の Markdown レンダリング追加（react-markdown, PR #89）で回答表示を整形
+- [x] ブラウザ CORS 二重 ACAO ヘッダ修正（FastAPI CORSMiddleware 除去, PR #87）
