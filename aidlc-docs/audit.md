@@ -2,6 +2,26 @@
 
 ---
 
+## Operations Phase — チャット UI の品質修正（文字化け/タイトル/重複/文言）（2026-06-30）
+
+**Timestamp**: 2026-06-30T13:50:00Z
+**User Input**: チャット UI 検証で3点指摘 — ①文字化け（携帯→化け）②「公式サイト/お問い合わせ」誘導が中の人として不自然 ③問い合わせ導線が無いのに案内・参照元が生 URL で遷移先不明。
+**AI Response**: 原因を特定し、コード修正＋データ是正（フル再クロールでなく対象バックフィル/dedup）で対応。
+
+**① 文字化け**: 旧 Shift_JIS の `/pc/business/` ページ（HTTP charset 無し）を httpx が UTF-8 誤デコード。`_fetch` を bytes 返却に変え parser が BeautifulSoup で `<meta charset>` 判定（PR #95）。既存の文字化け 308 チャンクは削除（次回クロールで自己修復）。
+
+**② 参照元 = ページタイトル表示**: `<title>` を parser→Embedder→vector-store→batch_get_texts→SearchHit→chat-api `sources`({url,title})→chat-ui まで伝播（PR #95）。既存 24,377 チャンクへ `backfill_titles.py` でタイトル充填（12,352/12,361 解決、再埋め込み不要）。
+
+**③ 文言**: 「公式サイトをご確認ください」「お問い合わせください」等の外部/他窓口誘導と締めの定型句をプロンプトで禁止、no-hit fallback からオペレーター案内除去（PR #95, #97）。
+
+**追加発見 — http/https 重複**: クローラーが同一ページの http/https 両方を辿り二重登録、コーパスの約半分が重複（5,131 ページ）。`_normalize_url` を https 正規化（PR #96）＋ `dedup_http_duplicates.py` で既存 http 重複 10,866 件削除。コーパス 24,377→**13,511**。chat-api でも sources を http/https 横断 dedup。
+
+**検証**: chat-api 実機で タイトル表示・重複なし・文字化けなし・締め文句なし を確認。ユニットテスト全 pass。デモ GIF/スクショ更新。
+
+**Context**: OPERATIONS — チャット回答・参照元の品質を是正（文字化け/重複/誘導文言）。コーパスは 13,511 の HTML（タイトル付き・重複/ノイズ排除）。
+
+---
+
 ## Operations Phase — コーパスの非HTMLパージ（2026-06-29）
 
 **Timestamp**: 2026-06-29T11:00:00Z
