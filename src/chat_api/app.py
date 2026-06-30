@@ -132,13 +132,20 @@ async def _event_stream(message: str, session_id: str | None) -> AsyncIterator[s
             return
 
         chunks = [{"text": h.text, "source_url": h.source_url} for h in usable]
-        # Emit sources as {url, title} (deduped by url, first title wins) so the
-        # UI can show a human-readable page title instead of a bare URL.
-        seen: dict[str, str] = {}
+        # Emit sources as {url, title} so the UI shows a human-readable page
+        # title. Dedupe across http/https of the same page (prefer https) so a
+        # page never appears twice.
+        seen: dict[str, dict[str, str]] = {}
         for h in usable:
-            if h.source_url and h.source_url not in seen:
-                seen[h.source_url] = h.title or ""
-        yield _sse("sources", [{"url": u, "title": t} for u, t in seen.items()])
+            if not h.source_url:
+                continue
+            key = h.source_url.split("://", 1)[-1].rstrip("/")
+            cur = seen.get(key)
+            if cur is None or (
+                h.source_url.startswith("https") and not cur["url"].startswith("https")
+            ):
+                seen[key] = {"url": h.source_url, "title": h.title or ""}
+        yield _sse("sources", list(seen.values()))
 
         parts: list[str] = []
         async for delta in bedrock.generate_answer_stream(
