@@ -30,6 +30,13 @@ def test_normalize_defaults_empty_path_to_root() -> None:
     assert _normalize_url("https://www.jibunbank.co.jp") == "https://www.jibunbank.co.jp/"
 
 
+def test_normalize_forces_https_scheme() -> None:
+    # http and https of the same page canonicalize to one https URL (no twins).
+    assert _normalize_url("http://www.jibunbank.co.jp/pc/x.html") == (
+        "https://www.jibunbank.co.jp/pc/x.html"
+    )
+
+
 def test_normalize_strips_query_on_main_site() -> None:
     assert _normalize_url("https://www.jibunbank.co.jp/news/?utm_source=top&page=2") == (
         "https://www.jibunbank.co.jp/news/"

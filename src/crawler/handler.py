@@ -78,7 +78,11 @@ def _target_urls() -> list[str]:
 
 
 def _normalize_url(url: str) -> str:
-    """Strip fragment; normalize the query string; ensure root path ends with '/'.
+    """Strip fragment; canonicalize scheme to https; normalize the query string.
+
+    The scheme is forced to https so the same page reachable over both http and
+    https is not crawled (and embedded) twice — that duplication previously
+    doubled the corpus and filled search results with http/https twins.
 
     On the FAQ host, only the `id` parameter (which selects the article) is
     kept; on all other hosts the query string is dropped entirely. This
@@ -87,12 +91,13 @@ def _normalize_url(url: str) -> str:
     """
     p = urlparse(url)
     path = p.path if p.path else "/"
+    scheme = "https" if p.scheme in ("http", "https") else p.scheme
     if p.hostname in _FAQ_HOSTS:
         kept = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if k == "id"]
         query = urlencode(kept)
     else:
         query = ""
-    return p._replace(fragment="", path=path, query=query).geturl()
+    return p._replace(scheme=scheme, fragment="", path=path, query=query).geturl()
 
 
 def _initial_state(
