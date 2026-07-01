@@ -13,7 +13,13 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from src.common.errors import ObjectNotFoundError, S3AccessError, SearchError
-from src.vector_store.searcher import CACHE_META, CACHE_TS, CACHE_VECTORS, CosineSimilaritySearcher
+from src.vector_store.searcher import (
+    CACHE_META,
+    CACHE_TS,
+    CACHE_VECTORS,
+    CosineSimilaritySearcher,
+    source_weight,
+)
 from src.vector_store.vector_cache_store import build_matrix_and_meta
 
 
@@ -211,3 +217,28 @@ def test_cosine_self_similarity_is_one() -> None:
         assert scores[0] == pytest.approx(1.0, abs=1e-6)
 
     _prop()
+
+
+def test_source_weight_prefers_authoritative_over_column_and_campaign() -> None:
+    # Authoritative rate/product/FAQ pages weigh above 1; column below; campaign lowest.
+    assert source_weight("https://www.jibunbank.co.jp/interest_and_commission/interest/") > 1.0
+    assert source_weight("https://www.jibunbank.co.jp/products/homeloan/") > 1.0
+    assert source_weight("https://help.jibunbank.co.jp/faq_detail.html?id=1") > 1.0
+    assert source_weight("https://www.jibunbank.co.jp/column/article/00471/") < 1.0
+    campaign = source_weight("https://www.jibunbank.co.jp/campaign/2026/x/")
+    assert campaign < source_weight("https://www.jibunbank.co.jp/column/article/1/")
+    assert source_weight("https://www.jibunbank.co.jp/other/") == 1.0
+
+
+async def test_search_reweights_authoritative_above_column() -> None:
+    # Column chunk has higher raw cosine, but the authoritative page wins after
+    # source weighting, so it is returned first.
+    items = [
+        {"chunkId": "col", "sourceUrl": "https://www.jibunbank.co.jp/column/a/",
+         "text": "col", "embedding": [1.0, 0.0]},
+        {"chunkId": "auth", "sourceUrl": "https://www.jibunbank.co.jp/interest_and_commission/interest/",
+         "text": "auth", "embedding": [0.94, 0.34]},
+    ]
+    searcher = CosineSimilaritySearcher(_store_with(items))  # type: ignore[arg-type]
+    hits = await searcher.search([1.0, 0.0], top_k=2)
+    assert hits[0].chunk_id == "auth"  # reweighted above the higher-cosine column
