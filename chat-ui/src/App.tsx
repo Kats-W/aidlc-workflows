@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import { streamChat, type Source } from './api/chatClient';
 
 interface Message {
@@ -87,7 +88,7 @@ export function App() {
               {m.text ? (
                 m.role === 'assistant' && !m.error ? (
                   <div className="markdown">
-                    <ReactMarkdown>{m.text}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkCjkFriendly]}>{m.text}</ReactMarkdown>
                   </div>
                 ) : (
                   m.text
