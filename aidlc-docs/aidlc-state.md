@@ -461,3 +461,21 @@
       - vector-store 130,213→15,209、content-diff →15,423（PDF/PNG=0）、キャッシュ 531MB→62MB
       - パージ後 LLM-judge は調整後とほぼ同水準（この14トピックは元々HTMLを取得、PDFはtop-5外）
 - [ ] 残課題: 1周目クロール完了（残6,176 URL）、コラム相場表のチャンク品質改善（数値取り違え）
+- [x] チャット品質フィードバック対応 Phase ①②（2026-07-02、PR #95〜#100 + 減点PR）:
+      - Q8 コンプラ: 一般論/コラムを当行商品として断定しない、NISA/投信/株式は仲介の可能性、
+        投資勧誘・利回り保証等の業法抵触表現を禁止（bedrock_client._build_prompt）
+      - Q9 太字: chat-ui に remark-cjk-friendly 追加で `**太字**` が描画されるように
+      - 実データ基盤: searcher に source_weight（/interest_and_commission/・/products/・help 優遇、
+        /column/・/campaign/・/announcement/・/corporate/news/ 減点）＋プロンプトで「◯月◯日時点」併記
+      - 期限切れキャンペーン削除（scripts/purge_expired_campaigns.py, 2014-2025=1,989チャンク）→ 11,522
+      - 検証: Q7カードローン=実数値(1.38/4.0/5.5/7.5%)＋日付, Q6定期=権威ページ＋日付, Q8=当行商品と断定せず
+- [ ] **次セッション再開点（Phase ③④・残課題）**:
+      - Phase ③ 対話的絞り込み（Q1/Q2/Q6）: 並列的な場合分けが要る質問で AI が追加質問して1案に絞る
+        （単発RAG→セッション内多ターン対話への拡張。例外注釈的な場合分けは深掘り不要）。※ユーザー承認済みスコープ
+      - Phase ④: キャンペーンは主回答にせず「現在お得なキャンペーンも実施中」の補足＋実施期間の現在含有確認(Q5)、
+        ネットバンキング不可の顧客を有人チャネルへ転送=chatのエスカレーション導線(Q9後半)
+      - 残: 住宅ローン金利の実数値がコーパスに乏しい(JS/PDF描画の可能性)＝カバレッジ対応、
+        /pc/ と canonical の重複ページ dedup（crawler _normalize_url で /pc/ 除去＋既存 dedup）、
+        クローラー auto-continue の一時コード削除（feat/crawler-auto-continue の TEMPORARY ブロック＋IAM）
+      - 運用: dev は概ね最新デプロイ済み。キャッシュ=11,522。デモキー取得は
+        `aws secretsmanager get-secret-value --secret-id au-jibun-bank-dev-chat-demo-key`
