@@ -57,6 +57,10 @@ _SOURCE_WEIGHT_RULES: tuple[tuple[str, float], ...] = (
     ("/products/", 1.12),
     ("help.jibunbank.co.jp", 1.10),
     ("/campaign/", 0.70),
+    # Time-bound announcements / news (e.g. historical rate-change notices) must
+    # not outrank the current rate pages for factual questions.
+    ("/announcement/", 0.68),
+    ("/corporate/news/", 0.70),
     ("/column/", 0.88),
 )
 
