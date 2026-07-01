@@ -48,6 +48,27 @@ class SearchHit:
     title: str = ""
 
 
+#: Per-source relevance weights applied on top of cosine similarity when ranking.
+#: Canonical rate/fee/product/FAQ pages carry the authoritative, dated figures and
+#: should outrank general explanatory column articles and time-bound campaign
+#: pages for factual questions (rates, fees, procedures).
+_SOURCE_WEIGHT_RULES: tuple[tuple[str, float], ...] = (
+    ("/interest_and_commission/", 1.20),
+    ("/products/", 1.12),
+    ("help.jibunbank.co.jp", 1.10),
+    ("/campaign/", 0.70),
+    ("/column/", 0.88),
+)
+
+
+def source_weight(source_url: str) -> float:
+    """Return the ranking weight for ``source_url`` (1.0 if no rule matches)."""
+    for needle, weight in _SOURCE_WEIGHT_RULES:
+        if needle in source_url:
+            return weight
+    return 1.0
+
+
 class CosineSimilaritySearcher:
     """Cosine top-k search over the VectorStore corpus with /tmp caching."""
 
@@ -79,8 +100,17 @@ class CosineSimilaritySearcher:
                 f"query dim {query.shape[0]} != corpus dim {matrix.shape[1]}"
             )
 
-        top_indices = self._cosine_top_k(matrix, query, top_k)
+        # Rank by cosine score reweighted by source authority so the canonical
+        # rate/product/FAQ pages outrank general column articles and campaign
+        # pages for factual questions. The reported hit score stays the raw
+        # cosine (used by the pipeline's MIN_HIT_SCORE relevance filter).
         scores = self._cosine_scores(matrix, query)
+        weights = np.fromiter(
+            (source_weight(m.get("sourceUrl", "")) for m in meta),
+            dtype=np.float32,
+            count=len(meta),
+        )
+        top_indices = self._top_k_indices(scores * weights, top_k)
 
         chunk_ids = [meta[i]["chunkId"] for i in top_indices]
         texts = await self._store.batch_get_texts(chunk_ids)
@@ -192,8 +222,12 @@ class CosineSimilaritySearcher:
         return scores
 
     def _cosine_top_k(self, matrix: np.ndarray, query: np.ndarray, k: int) -> list[int]:
-        """Return the indices of the ``k`` highest-scoring rows (descending)."""
-        scores = self._cosine_scores(matrix, query)
+        """Return the indices of the ``k`` highest cosine-scoring rows (descending)."""
+        return self._top_k_indices(self._cosine_scores(matrix, query), k)
+
+    @staticmethod
+    def _top_k_indices(scores: np.ndarray, k: int) -> list[int]:
+        """Return the indices of the ``k`` highest values in ``scores`` (descending)."""
         k = min(k, scores.shape[0])
         if k <= 0:
             return []
