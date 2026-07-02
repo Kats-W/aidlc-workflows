@@ -23,8 +23,11 @@ class _FakeMasker:
 
 
 class _FakePersonalizer:
+    def __init__(self, history_text: str = "") -> None:
+        self._history_text = history_text
+
     async def build_context(self, customer_id: str) -> str:
-        return ""
+        return self._history_text
 
 
 class _FakeHistory:
@@ -39,9 +42,17 @@ class _FakeBedrock:
     def __init__(self, deltas: list[str], *, raise_mid: bool = False) -> None:
         self._deltas = deltas
         self._raise_mid = raise_mid
+        self.embedded: str | None = None
+        self.allow_clarifying: bool | None = None
 
     async def embed(self, text: str) -> list[float]:
+        self.embedded = text
         return [0.1] * 1024
+
+    async def condense_query(self, message: str, history_text: str) -> str:
+        # Emulate the real best-effort contract: rewrite only when there is
+        # history to condense against, otherwise return the message unchanged.
+        return f"{message}::condensed" if history_text.strip() else message
 
     def sources_for(self, chunks: list[dict[str, Any]]) -> list[str]:
         seen: list[str] = []
@@ -52,8 +63,14 @@ class _FakeBedrock:
         return seen
 
     async def generate_answer_stream(
-        self, query: str, chunks: list[dict[str, Any]], history_text: str, max_tokens: int = 700
+        self,
+        query: str,
+        chunks: list[dict[str, Any]],
+        history_text: str,
+        max_tokens: int = 700,
+        allow_clarifying: bool = False,
     ) -> AsyncIterator[str]:
+        self.allow_clarifying = allow_clarifying
         for d in self._deltas:
             yield d
         if self._raise_mid:
@@ -79,14 +96,19 @@ def _hit(score: float, url: str = "https://jibun/loan") -> SearchHit:
 
 
 def _install(
-    monkeypatch: pytest.MonkeyPatch, *, hits: list[SearchHit], bedrock: _FakeBedrock
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    hits: list[SearchHit],
+    bedrock: _FakeBedrock,
+    personalizer: _FakePersonalizer | None = None,
 ) -> _FakeHistory:
     history = _FakeHistory()
     searcher = _FakeSearcher(hits)
+    personalizer = personalizer or _FakePersonalizer()
     monkeypatch.setattr(
         app_module,
         "build_collaborators",
-        lambda: (_FakeMasker(), _FakePersonalizer(), bedrock, history),
+        lambda: (_FakeMasker(), personalizer, bedrock, history),
     )
     # Patch both the global and its factory so the FastAPI lifespan (which runs
     # on TestClient __enter__ and rebuilds the searcher) keeps using the fake.
@@ -131,6 +153,36 @@ def test_chat_streams_sources_tokens_done(monkeypatch: pytest.MonkeyPatch) -> No
     assert dict(events)["done"] == {"hit": True}
     # user + assistant turns persisted.
     assert len(history.turns) == 2
+
+
+def test_chat_condenses_followup_before_retrieval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # With prior history, the follow-up is condensed into a standalone query
+    # before embedding (Phase ③ history-aware retrieval).
+    bedrock = _FakeBedrock(["ok"])
+    personalizer = _FakePersonalizer(history_text="顧客: 住宅ローンの金利は")
+    _install(monkeypatch, hits=[_hit(0.8)], bedrock=bedrock, personalizer=personalizer)
+
+    with TestClient(app) as client:
+        client.post("/chat", json={"message": "変動金利で", "sessionId": "s1"})
+
+    assert bedrock.embedded == "変動金利で::condensed"
+    # The chat path lets the model ask a clarifying question.
+    assert bedrock.allow_clarifying is True
+
+
+def test_chat_first_turn_embeds_message_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # No history -> no condensing, the raw message is embedded.
+    bedrock = _FakeBedrock(["ok"])
+    _install(monkeypatch, hits=[_hit(0.8)], bedrock=bedrock)
+
+    with TestClient(app) as client:
+        client.post("/chat", json={"message": "住宅ローンの金利は", "sessionId": "s1"})
+
+    assert bedrock.embedded == "住宅ローンの金利は"
 
 
 def test_chat_no_usable_hits_returns_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

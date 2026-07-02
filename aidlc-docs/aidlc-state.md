@@ -469,9 +469,19 @@
         /column/・/campaign/・/announcement/・/corporate/news/ 減点）＋プロンプトで「◯月◯日時点」併記
       - 期限切れキャンペーン削除（scripts/purge_expired_campaigns.py, 2014-2025=1,989チャンク）→ 11,522
       - 検証: Q7カードローン=実数値(1.38/4.0/5.5/7.5%)＋日付, Q6定期=権威ページ＋日付, Q8=当行商品と断定せず
-- [ ] **次セッション再開点（Phase ③④・残課題）**:
-      - Phase ③ 対話的絞り込み（Q1/Q2/Q6）: 並列的な場合分けが要る質問で AI が追加質問して1案に絞る
-        （単発RAG→セッション内多ターン対話への拡張。例外注釈的な場合分けは深掘り不要）。※ユーザー承認済みスコープ
+- [x] チャット品質フィードバック対応 Phase ③（2026-07-02、対話的絞り込み）:
+      - Q1/Q2/Q6 の並列的な場合分けが要る質問で、全ケース列挙せず確認質問を1つ返して1案に絞る
+        挙動を追加（bedrock_client._build_prompt に allow_clarifying オプション、chat 経路のみ有効。
+        voice の generate_answer は既定 False で従来どおり）
+      - 多ターン検索の課題（フォローアップの短い返答は単体 embed で retrieval が弱い／履歴を
+        単純連結すると話題切替時に汚染）を、bedrock_client.condense_query で解消:
+        履歴＋最新発話を Haiku で自己完結クエリに書き換えてから embed（履歴なし=no-op、
+        Bedrock 失敗時は生メッセージにフォールバックする best-effort）
+      - session 履歴は既存基盤で成立（chat-ui が crypto.randomUUID の sessionId を全ターン送信、
+        サーバは customer_id=sessionId で build_context / append_turn 済み）
+      - 検証: unit 全緑・ruff・mypy 通過。独立レビューで検出した「連結方式の話題切替汚染」を
+        LLM 書き換え方式に変更して解消
+- [ ] **次セッション再開点（Phase ④・残課題）**:
       - Phase ④: キャンペーンは主回答にせず「現在お得なキャンペーンも実施中」の補足＋実施期間の現在含有確認(Q5)、
         ネットバンキング不可の顧客を有人チャネルへ転送=chatのエスカレーション導線(Q9後半)
       - 残: 住宅ローン金利の実数値がコーパスに乏しい(JS/PDF描画の可能性)＝カバレッジ対応、

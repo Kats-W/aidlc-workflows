@@ -155,6 +155,48 @@ async def test_generate_answer_stream_midstream_error_raises() -> None:
         await _collect(bedrock.generate_answer_stream("q", _CHUNKS, history_text=""))
 
 
+def test_build_prompt_adds_drilldown_policy_only_when_allowed() -> None:
+    base = BedrockClient._build_prompt("金利は", _CHUNKS, history_text="")
+    assert "対話的な絞り込み" not in base
+
+    clarifying = BedrockClient._build_prompt(
+        "金利は", _CHUNKS, history_text="", allow_clarifying=True
+    )
+    assert "対話的な絞り込み" in clarifying
+    assert "確認質問を1つだけ返して" in clarifying
+
+
+async def test_condense_query_rewrites_with_history() -> None:
+    client = MagicMock()
+    client.invoke_model.return_value = {
+        "body": _mock_body({"content": [{"type": "text", "text": "住宅ローンの変動金利\n"}]})
+    }
+    bedrock = BedrockClient(client=client)
+    out = await bedrock.condense_query("変動で", history_text="顧客: 住宅ローンの金利は")
+    assert out == "住宅ローンの変動金利"  # trailing newline stripped, first line only
+    assert client.invoke_model.call_args.kwargs["modelId"] == (
+        "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
+    )
+
+
+async def test_condense_query_no_history_skips_model_call() -> None:
+    client = MagicMock()
+    bedrock = BedrockClient(client=client)
+    out = await bedrock.condense_query("変動で", history_text="")
+    assert out == "変動で"
+    client.invoke_model.assert_not_called()
+
+
+async def test_condense_query_falls_back_to_message_on_error() -> None:
+    client = MagicMock()
+    client.invoke_model.side_effect = ClientError(
+        {"Error": {"Code": "ValidationException", "Message": "bad"}}, "InvokeModel"
+    )
+    bedrock = BedrockClient(client=client)
+    out = await bedrock.condense_query("変動で", history_text="顧客: 金利は")
+    assert out == "変動で"
+
+
 def test_sources_for_dedupes() -> None:
     chunks = [
         {"text": "a", "source_url": "https://x/1"},

@@ -195,12 +195,65 @@ class BedrockClient:
         """
         return self._dedupe_sources(context_chunks)
 
+    async def condense_query(self, message: str, history_text: str) -> str:
+        """Rewrite a follow-up into a standalone retrieval query using history.
+
+        In the multi-turn chat path a terse clarification (「変動で」) after the AI
+        narrows a branching question retrieves poorly on its own. Given the prior
+        conversation, Claude Haiku 4.5 condenses the latest message into a
+        self-contained Japanese search query so the follow-up finds the right
+        topic without the earlier (possibly unrelated) turns diluting the vector.
+
+        With no history the original ``message`` is returned unchanged (no model
+        call). This is best-effort: on any Bedrock failure the original message is
+        returned so retrieval still proceeds rather than failing the whole turn.
+        """
+        if not message.strip() or not history_text.strip():
+            return message
+
+        prompt = (
+            "あなたは検索クエリ書き換えアシスタントです. "
+            "以下の会話の文脈をふまえ, 最後のお客さまの発話を, それ単体で検索できる"
+            "自己完結した日本語の検索クエリに書き換えてください. "
+            "新しい情報は加えず, 説明や前置き・記号は書かず, "
+            "書き換えたクエリ本文のみを1行で返してください.\n\n"
+            f"# 会話\n{history_text.strip()}\n\n"
+            f"# 最後の発話\n{message.strip()}"
+        )
+        payload = json.dumps(
+            {
+                "anthropic_version": ANTHROPIC_VERSION,
+                "max_tokens": 256,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        )
+
+        def _invoke() -> str:
+            response = self._client.invoke_model(
+                modelId=RAG_ANSWER_MODEL_ID,
+                accept="application/json",
+                contentType="application/json",
+                body=payload,
+            )
+            body = json.loads(response["body"].read())
+            blocks = body["content"]
+            return "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+
+        try:
+            text = await asyncio.to_thread(_invoke)
+        except (ClientError, KeyError, ValueError, TypeError):
+            logger.warning("condense_query failed; using raw message", exc_info=True)
+            return message
+        condensed = text.strip().splitlines()[0].strip() if text.strip() else ""
+        return condensed or message
+
     async def generate_answer_stream(
         self,
         query: str,
         context_chunks: list[dict[str, Any]],
         history_text: str,
         max_tokens: int = 1024,
+        allow_clarifying: bool = False,
     ) -> AsyncIterator[str]:
         """Yield Claude Haiku 4.5 answer text deltas over the retrieved context.
 
@@ -209,6 +262,13 @@ class BedrockClient:
         web client as they arrive (lower time-to-first-token). Source URLs are
         not yielded here; obtain them up front via :meth:`sources_for`.
 
+        Args:
+            allow_clarifying: When ``True`` (the multi-turn chat path), let the
+                model return a single clarifying question instead of an answer
+                when the question branches into materially different parallel
+                cases. The voice path leaves this off (single-shot, latency
+                budget), so :meth:`generate_answer` never asks back.
+
         Raises:
             BedrockThrottledError: If Bedrock throttles the request (retryable).
             BedrockError: If the request fails or the stream errors.
@@ -216,7 +276,9 @@ class BedrockClient:
         if not query or not query.strip():
             raise BedrockError("cannot generate an answer for empty query")
 
-        prompt = self._build_prompt(query, context_chunks, history_text)
+        prompt = self._build_prompt(
+            query, context_chunks, history_text, allow_clarifying=allow_clarifying
+        )
         payload = json.dumps(
             {
                 "anthropic_version": ANTHROPIC_VERSION,
@@ -496,9 +558,18 @@ class BedrockClient:
 
     @staticmethod
     def _build_prompt(
-        query: str, context_chunks: list[dict[str, Any]], history_text: str
+        query: str,
+        context_chunks: list[dict[str, Any]],
+        history_text: str,
+        *,
+        allow_clarifying: bool = False,
     ) -> str:
-        """Assemble the Japanese RAG prompt: history + references + question."""
+        """Assemble the Japanese RAG prompt: history + references + question.
+
+        When ``allow_clarifying`` is set (multi-turn chat), a drill-down policy
+        is appended so the model narrows a branching question to one case with a
+        single follow-up question instead of listing every case at once.
+        """
         references = "\n\n".join(
             f"[参考{i + 1}] {str(c.get('text') or '').strip()}"
             for i, c in enumerate(context_chunks)
@@ -531,6 +602,19 @@ class BedrockClient:
             "- 投資の勧誘や, 断定的判断の提供・元本や利回りの保証など, 金融商品取引法をはじめ"
             "各業法に抵触しうる表現は一切しない.",
         ]
+        if allow_clarifying:
+            parts.append(
+                "# 対話的な絞り込み\n"
+                "- 質問が, 回答内容が大きく異なる複数の並列的なケース"
+                "(例: 商品タイプ, 金利タイプ, プランの違い)に分かれ, "
+                "どのケースかによって答えが変わる場合は, 全ケースを列挙せず, "
+                "まず簡潔な確認質問を1つだけ返してお客さまのケースを1つに絞り込む.\n"
+                "- ただし, 過去の会話でお客さまが既に対象のケースを示している場合や, "
+                "場合分けが注釈・例外の程度で回答の主旨が変わらない場合は, "
+                "確認せずそのまま回答する.\n"
+                "- 確認質問を返すときは, 回答本文や参考情報の要約は書かず, "
+                "その確認質問だけを返す."
+            )
         if history_text.strip():
             parts.append(f"# 過去の会話\n{history_text.strip()}")
         parts.append(f"# 参考情報\n{references or '参考情報なし'}")

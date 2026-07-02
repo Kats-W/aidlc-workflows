@@ -121,7 +121,10 @@ async def _event_stream(message: str, session_id: str | None) -> AsyncIterator[s
     try:
         masked, _entities = await masker.mask(message)
         history_text = await personalizer.build_context(customer_id)
-        query_vec = await bedrock.embed(masked)
+        # Rewrite terse follow-ups into a standalone query so multi-turn
+        # drill-down (Phase ③) retrieves the right topic; no-op on the first turn.
+        search_query = await bedrock.condense_query(masked, history_text)
+        query_vec = await bedrock.embed(search_query)
         hits = await searcher.search(query_vec, top_k=TOP_K)
 
         usable = [h for h in hits if h.score >= MIN_HIT_SCORE]
@@ -149,7 +152,11 @@ async def _event_stream(message: str, session_id: str | None) -> AsyncIterator[s
 
         parts: list[str] = []
         async for delta in bedrock.generate_answer_stream(
-            masked, chunks, history_text, max_tokens=CHAT_ANSWER_MAX_TOKENS
+            masked,
+            chunks,
+            history_text,
+            max_tokens=CHAT_ANSWER_MAX_TOKENS,
+            allow_clarifying=True,
         ):
             parts.append(delta)
             yield _sse("token", delta)
